@@ -557,6 +557,9 @@ def _publish_discovery(client, cfg: Config, base: str, avail_topic: str):
     if cfg.modules.health and cfg.disks:
         for d in cfg.disks:
             ha(f"{node}_health_{d}", f"Health {d}", f"{base}/health_{d}", "%")
+    if cfg.modules.raids and cfg.raids:
+        for arr in cfg.raids:
+            ha(f"{node}_raid_{arr}", f"RAID {arr} Active Devices", f"{base}/raid/{arr}")
     if cfg.modules.gpu:
         ha(f"{node}_gpu_temp", "GPU Temp", f"{base}/gpu/temp", "°C", "temperature")
         ha(f"{node}_gpu_util", "GPU Utilization", f"{base}/gpu/util", "%")
