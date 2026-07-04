@@ -1,2 +1,4 @@
 server-status.yaml
 __pycache__/
+/server-status
+/server-status.exe

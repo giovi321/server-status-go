@@ -98,13 +98,13 @@ func (CPU) Collect(ctx context.Context) ([]model.Metric, error) {
 	}
 	usage := usagePercent(a, b)
 	return []model.Metric{{
-		Key:         "cpu_usage",
-		Name:        "CPU usage",
-		Value:       int(usage + 0.5),
-		Unit:        "%",
-		StateClass:  "measurement",
-		Kind:        model.KindSensor,
-		Category:    "primary",
-		Icon:        "mdi:cpu-64-bit",
+		Key:        "cpu_usage",
+		Name:       "CPU usage",
+		Value:      int(usage + 0.5),
+		Unit:       "%",
+		StateClass: "measurement",
+		Kind:       model.KindSensor,
+		Category:   "primary",
+		Icon:       "mdi:cpu-64-bit",
 	}}, nil
 }

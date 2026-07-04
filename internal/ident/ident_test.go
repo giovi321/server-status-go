@@ -8,10 +8,10 @@ import (
 
 func TestSanitize(t *testing.T) {
 	cases := map[string]string{
-		"GC01srvr":       "gc01srvr",
-		"host.lan":       "host-lan",
-		"weird__Name!!":  "weird-name",
-		"--edges--":      "edges",
+		"GC01srvr":      "gc01srvr",
+		"host.lan":      "host-lan",
+		"weird__Name!!": "weird-name",
+		"--edges--":     "edges",
 	}
 	for in, want := range cases {
 		if got := Sanitize(in); got != want {

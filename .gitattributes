@@ -1,0 +1,4 @@
+# Keep shell scripts and systemd unit files LF on every platform so they run
+# correctly on the Debian target even when edited on Windows.
+*.sh text eol=lf
+*.service text eol=lf
