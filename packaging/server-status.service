@@ -1,0 +1,18 @@
+[Unit]
+Description=server-status metrics publisher
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=/opt/server-status/server-status -c /etc/server-status/config.yaml
+Restart=always
+RestartSec=15s
+TimeoutStopSec=10s
+# Sandboxing that does not block hardware access; expanded in a later reliability plan.
+ProtectHome=true
+NoNewPrivileges=false
+
+[Install]
+WantedBy=multi-user.target
