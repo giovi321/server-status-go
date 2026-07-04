@@ -50,7 +50,7 @@ func main() {
 	cols := detect.Available(detect.All())
 
 	if *dump {
-		if err := detect.DumpJSON(os.Stdout, dev, cols, ctx); err != nil {
+		if err := detect.DumpJSON(os.Stdout, dev, detect.All(), ctx); err != nil {
 			log.Fatalf("dump: %v", err)
 		}
 		return
