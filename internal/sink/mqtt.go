@@ -2,6 +2,7 @@ package sink
 
 import (
 	"fmt"
+	"sync"
 	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
@@ -17,6 +18,7 @@ type MQTT struct {
 	dev        model.Device
 	client     mqtt.Client
 	availTopic string
+	mu         sync.Mutex
 	// discovered tracks which metric keys have had discovery published this connection.
 	discovered map[string]bool
 }
@@ -47,7 +49,9 @@ func (m *MQTT) Connect() error {
 	}
 	// On every (re)connect, republish availability and force discovery to be re-sent.
 	opts.SetOnConnectHandler(func(c mqtt.Client) {
+		m.mu.Lock()
 		m.discovered = map[string]bool{}
+		m.mu.Unlock()
 		c.Publish(m.availTopic, byte(m.sc.QoS), true, "online")
 	})
 
@@ -61,14 +65,23 @@ func (m *MQTT) Connect() error {
 
 // Publish sends discovery (once per connection per metric) then the current state for each metric.
 func (m *MQTT) Publish(snap model.Snapshot) error {
+	if m.client == nil || !m.client.IsConnected() {
+		return fmt.Errorf("mqtt sink not connected; skipping publish for %s", snap.Device.Node)
+	}
 	for _, metric := range snap.Metrics {
-		if !m.discovered[metric.Key+"|"+metric.Component] {
+		key := metric.Key + "|" + metric.Component
+		m.mu.Lock()
+		already := m.discovered[key]
+		m.mu.Unlock()
+		if !already {
 			topic, payload, err := ha.Discovery(snap.Device, metric, m.sc)
 			if err != nil {
 				return err
 			}
 			m.client.Publish(topic, byte(m.sc.QoS), true, payload)
-			m.discovered[metric.Key+"|"+metric.Component] = true
+			m.mu.Lock()
+			m.discovered[key] = true
+			m.mu.Unlock()
 		}
 		stateTopic := ha.StateTopic(m.sc.BaseTopic, snap.Device.Node, metric.Component, metric.Key)
 		m.client.Publish(stateTopic, byte(m.sc.QoS), m.sc.Retain, ha.StateValue(metric))
@@ -78,10 +91,13 @@ func (m *MQTT) Publish(snap model.Snapshot) error {
 
 // Close publishes offline and disconnects.
 func (m *MQTT) Close() error {
-	if m.client != nil && m.client.IsConnected() {
+	if m.client == nil {
+		return nil
+	}
+	if m.client.IsConnected() {
 		tok := m.client.Publish(m.availTopic, byte(m.sc.QoS), true, "offline")
 		tok.WaitTimeout(2 * time.Second)
-		m.client.Disconnect(250)
 	}
+	m.client.Disconnect(250)
 	return nil
 }
