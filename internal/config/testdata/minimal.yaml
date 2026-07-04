@@ -1,0 +1,6 @@
+node: gc01srvr
+sinks:
+  - type: mqtt
+    host: 192.168.1.65
+    username: mqtt
+    password: ${TEST_MQTT_PASSWORD}
