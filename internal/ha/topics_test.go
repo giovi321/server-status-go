@@ -41,3 +41,15 @@ func TestStateValue(t *testing.T) {
 		t.Fatalf("bool false: %q", got)
 	}
 }
+
+func TestUniqueID(t *testing.T) {
+	dev := model.Device{Identifier: "server-status-gc01srvr"}
+	host := UniqueID(dev, model.Metric{Key: "cpu_usage"})
+	if host != "server-status-gc01srvr-cpu_usage" {
+		t.Fatalf("host unique_id: %q", host)
+	}
+	comp := UniqueID(dev, model.Metric{Key: "disk_temperature", Component: "disk-abc"})
+	if comp != "server-status-gc01srvr-disk-abc-disk_temperature" {
+		t.Fatalf("component unique_id: %q", comp)
+	}
+}

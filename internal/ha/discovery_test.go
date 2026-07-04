@@ -67,3 +67,50 @@ func TestDiscoveryDiagnosticCategory(t *testing.T) {
 		t.Fatal("via_device belongs inside device, not at top level")
 	}
 }
+
+func TestDiscoveryBinarySensor(t *testing.T) {
+	dev := model.Device{Node: "n", Identifier: "server-status-n"}
+	m := model.Metric{Key: "reboot_required", Name: "Reboot required", Value: true, Kind: model.KindBinarySensor, Category: "primary"}
+	sc := config.SinkConfig{BaseTopic: "server-status", DiscoveryPrefix: "homeassistant"}
+	topic, payload, err := Discovery(dev, m, sc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if topic != "homeassistant/binary_sensor/n/n_reboot_required/config" {
+		t.Fatalf("topic: %q", topic)
+	}
+	var obj map[string]any
+	if err := json.Unmarshal(payload, &obj); err != nil {
+		t.Fatal(err)
+	}
+	if obj["payload_on"] != "ON" || obj["payload_off"] != "OFF" {
+		t.Fatalf("payload_on/off: %v/%v", obj["payload_on"], obj["payload_off"])
+	}
+	if _, ok := obj["unit_of_measurement"]; ok {
+		t.Fatal("binary_sensor must not have unit_of_measurement")
+	}
+	if _, ok := obj["state_class"]; ok {
+		t.Fatal("binary_sensor must not have state_class")
+	}
+}
+
+func TestDiscoveryViaDeviceWhenParentSet(t *testing.T) {
+	dev := model.Device{Node: "vm-web", Identifier: "server-status-vm-web", Parent: "gc01srvr"}
+	m := model.Metric{Key: "cpu_usage", Name: "CPU usage", Value: 5, Unit: "%", StateClass: "measurement", Kind: model.KindSensor}
+	sc := config.SinkConfig{BaseTopic: "server-status", DiscoveryPrefix: "homeassistant"}
+	_, payload, err := Discovery(dev, m, sc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var obj map[string]any
+	if err := json.Unmarshal(payload, &obj); err != nil {
+		t.Fatal(err)
+	}
+	device, ok := obj["device"].(map[string]any)
+	if !ok {
+		t.Fatal("device block missing")
+	}
+	if device["via_device"] != "server-status-gc01srvr" {
+		t.Fatalf("via_device: %v", device["via_device"])
+	}
+}
