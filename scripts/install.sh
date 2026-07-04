@@ -37,7 +37,18 @@ YAML
   echo "Wrote default config to $CFG_DIR/config.yaml (edit it, then restart the service)."
 fi
 
+if [[ ! -f "$CFG_DIR/server-status.env" ]]; then
+  cat > "$CFG_DIR/server-status.env" <<'ENVEOF'
+# Secrets for server-status, loaded into the service environment by systemd
+# (EnvironmentFile in the unit). Referenced from config.yaml as ${MQTT_PASSWORD}.
+MQTT_PASSWORD=
+ENVEOF
+  chmod 600 "$CFG_DIR/server-status.env"
+  echo "Wrote secret stub to $CFG_DIR/server-status.env (set MQTT_PASSWORD there; it is chmod 600)."
+fi
+
 install -m 0644 packaging/server-status.service "$UNIT"
 systemctl daemon-reload
-systemctl enable --now server-status.service
-echo "Installed and started server-status. Logs: journalctl -u server-status -f"
+systemctl enable server-status.service
+systemctl restart server-status.service
+echo "Installed server-status. Set MQTT_PASSWORD in $CFG_DIR/server-status.env, then: systemctl restart server-status. Logs: journalctl -u server-status -f"
