@@ -1,0 +1,22 @@
+{
+  "name": "CPU usage",
+  "state_topic": "server-status/gc01srvr/cpu_usage",
+  "unique_id": "server-status-gc01srvr-cpu_usage",
+  "object_id": "gc01srvr_cpu_usage",
+  "has_entity_name": true,
+  "unit_of_measurement": "%",
+  "state_class": "measurement",
+  "icon": "mdi:cpu-64-bit",
+  "availability_topic": "server-status/gc01srvr/availability",
+  "payload_available": "online",
+  "payload_not_available": "offline",
+  "qos": 0,
+  "device": {
+    "identifiers": [
+      "server-status-gc01srvr"
+    ],
+    "name": "gc01srvr",
+    "manufacturer": "server-status",
+    "sw_version": "dev"
+  }
+}
