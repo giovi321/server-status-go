@@ -69,7 +69,7 @@ func (m *MQTT) Publish(snap model.Snapshot) error {
 		return fmt.Errorf("mqtt sink not connected; skipping publish for %s", snap.Device.Node)
 	}
 	for _, metric := range snap.Metrics {
-		key := metric.Key + "|" + metric.Component
+		key := metric.Key + "|" + metric.Component + "|" + metric.Instance
 		m.mu.Lock()
 		already := m.discovered[key]
 		m.mu.Unlock()
