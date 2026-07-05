@@ -19,6 +19,13 @@ func All() []collector.Collector {
 		collector.CPU{},
 		collector.Memory{},
 		collector.Uptime{},
+		collector.Load{},
+		collector.Swap{},
+		collector.Filesystem{},
+		&collector.Network{},
+		collector.Temperature{},
+		collector.Apt{},
+		collector.Systemd{},
 	}
 }
 
