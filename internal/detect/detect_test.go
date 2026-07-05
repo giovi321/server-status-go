@@ -42,3 +42,26 @@ func TestSnapshotAggregates(t *testing.T) {
 		t.Fatal("timestamp not set")
 	}
 }
+
+type panicky struct{ name string }
+
+func (p panicky) Name() string                                    { return p.name }
+func (p panicky) Available() bool                                 { return true }
+func (p panicky) Collect(context.Context) ([]model.Metric, error) { panic("boom") }
+
+func TestSnapshotIsolatesPanic(t *testing.T) {
+	cols := []collectorIface{
+		fake{name: "ok", avail: true, metrics: []model.Metric{{Key: "x"}}},
+		panicky{name: "bad"},
+		fake{name: "ok2", avail: true, metrics: []model.Metric{{Key: "y"}}},
+	}
+	// Must not panic, and must still collect from the healthy collectors.
+	snap := snapshotFrom(context.Background(), model.Device{Node: "n"}, cols)
+	keys := map[string]bool{}
+	for _, m := range snap.Metrics {
+		keys[m.Key] = true
+	}
+	if !keys["x"] || !keys["y"] {
+		t.Fatalf("healthy collectors must still run despite a panicking one: %+v", keys)
+	}
+}

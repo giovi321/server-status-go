@@ -50,14 +50,33 @@ func Available(cols []collector.Collector) []collector.Collector {
 	return availableFrom(cols)
 }
 
+// defaultCollectTimeout bounds a single collector's Collect call. Collectors run
+// serially, so this is sized well under the systemd WatchdogSec (180s) even when
+// several collectors hit their timeout in the same cycle.
+const defaultCollectTimeout = 20 * time.Second
+
+// collectSafe runs one collector with a timeout and isolates panics, so a slow
+// or panicking collector cannot stall the cycle or crash the agent. Collectors
+// run serially (they hold per-instance state), and all respect ctx cancellation.
+func collectSafe(ctx context.Context, c collectorIface, timeout time.Duration) (out []model.Metric) {
+	defer func() {
+		if r := recover(); r != nil {
+			out = nil
+		}
+	}()
+	cctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	m, err := c.Collect(cctx)
+	if err != nil {
+		return nil
+	}
+	return m
+}
+
 func snapshotFrom(ctx context.Context, dev model.Device, cols []collectorIface) model.Snapshot {
 	snap := model.Snapshot{Device: dev, TS: time.Now()}
 	for _, c := range cols {
-		metrics, err := c.Collect(ctx)
-		if err != nil {
-			continue
-		}
-		snap.Metrics = append(snap.Metrics, metrics...)
+		snap.Metrics = append(snap.Metrics, collectSafe(ctx, c, defaultCollectTimeout)...)
 	}
 	return snap
 }
