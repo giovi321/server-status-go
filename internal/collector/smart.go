@@ -15,8 +15,6 @@ import (
 	"github.com/giovi321/server-status/internal/model"
 )
 
-const smartctlBin = "/usr/sbin/smartctl"
-
 // Smart publishes SMART health per physical disk as a sub-device. It caches
 // results in memory on a min-interval so it does not wake drives every cycle.
 type Smart struct {
@@ -116,6 +114,9 @@ func smartMetrics(cfg config.Config, disk string, si SmartInfo) []model.Metric {
 	}
 	if si.Pending != nil {
 		out = append(out, sensor("disk_pending_sectors", "Pending sectors", *si.Pending, "", "", "measurement"))
+	}
+	if si.OfflineUncorrectable != nil {
+		out = append(out, sensor("disk_offline_uncorrectable", "Offline uncorrectable", *si.OfflineUncorrectable, "", "", "measurement"))
 	}
 	if si.CRCErrors != nil {
 		out = append(out, sensor("disk_crc_errors", "CRC errors", *si.CRCErrors, "", "", "measurement"))
