@@ -153,9 +153,12 @@ func (m *MQTT) publishControlDiscoveryOnce(dev model.Device) error {
 }
 
 // Purge clears all retained discovery for this host so Home Assistant removes the
-// device. It publishes empty retained payloads to every discovery config topic
-// (metrics, control buttons, update entity) and to the availability topic, then
-// disconnects gracefully so the LWT does not republish an offline availability.
+// device and every entity — including entities from earlier cycles that are absent
+// from the current snapshot (e.g. an unplugged disk or a stopped container). It
+// sweeps every retained discovery config topic under this node and clears them,
+// also clears the current snapshot's entities and control entities explicitly (in
+// case retained delivery is slow), clears the availability topic, then disconnects
+// gracefully so the LWT does not republish an offline availability.
 func (m *MQTT) Purge(snap model.Snapshot) error {
 	if m.client == nil || !m.client.IsConnected() {
 		return fmt.Errorf("mqtt sink not connected; cannot purge %s", snap.Device.Node)
@@ -163,6 +166,36 @@ func (m *MQTT) Purge(snap model.Snapshot) error {
 	clear := func(topic string) {
 		m.client.Publish(topic, byte(m.sc.QoS), true, "").WaitTimeout(2 * time.Second)
 	}
+
+	// 1) Sweep: collect every retained discovery config topic for this node. The
+	//    node segment is always dev.Node, so this wildcard matches host and
+	//    sub-device entities alike, including ones no longer in the snapshot.
+	wildcard := m.sc.DiscoveryPrefix + "/+/" + m.dev.Node + "/+/config"
+	var mu sync.Mutex
+	swept := map[string]bool{}
+	tok := m.client.Subscribe(wildcard, byte(m.sc.QoS), func(_ mqtt.Client, msg mqtt.Message) {
+		if len(msg.Payload()) == 0 {
+			return // already cleared
+		}
+		mu.Lock()
+		swept[msg.Topic()] = true
+		mu.Unlock()
+	})
+	tok.WaitTimeout(2 * time.Second)
+	time.Sleep(2 * time.Second) // let the broker deliver retained configs
+	m.client.Unsubscribe(wildcard).WaitTimeout(2 * time.Second)
+	mu.Lock()
+	topics := make([]string, 0, len(swept))
+	for t := range swept {
+		topics = append(topics, t)
+	}
+	mu.Unlock()
+	for _, t := range topics {
+		clear(t)
+	}
+
+	// 2) Belt-and-suspenders: clear the current snapshot's entities + control
+	//    entities explicitly, in case retained delivery did not surface them.
 	for _, metric := range snap.Metrics {
 		if topic, _, err := ha.Discovery(snap.Device, metric, m.sc); err == nil {
 			clear(topic)
@@ -179,6 +212,8 @@ func (m *MQTT) Purge(snap model.Snapshot) error {
 			clear(t)
 		}
 	}
+
+	// 3) Availability last, then graceful disconnect (no LWT republish).
 	clear(m.availTopic)
 	m.client.Disconnect(250)
 	return nil

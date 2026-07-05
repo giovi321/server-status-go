@@ -35,3 +35,15 @@ func TestNotifyNoSocketIsNoop(t *testing.T) {
 	os.Unsetenv("NOTIFY_SOCKET")
 	Ping() // must not panic or block
 }
+
+func TestDeadline(t *testing.T) {
+	t.Setenv("WATCHDOG_USEC", "180000000")
+	d, ok := Deadline()
+	if !ok || d != 180*time.Second {
+		t.Fatalf("got %v ok=%v, want 180s true", d, ok)
+	}
+	os.Unsetenv("WATCHDOG_USEC")
+	if _, ok := Deadline(); ok {
+		t.Fatal("Deadline must report ok=false when WATCHDOG_USEC is unset")
+	}
+}

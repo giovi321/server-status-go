@@ -4,6 +4,8 @@ package watchdog
 import (
 	"net"
 	"os"
+	"strconv"
+	"time"
 )
 
 // Notify sends a state string to the systemd notify socket ($NOTIFY_SOCKET).
@@ -26,3 +28,17 @@ func Ready() { Notify("READY=1") }
 
 // Ping resets the systemd watchdog timer.
 func Ping() { Notify("WATCHDOG=1") }
+
+// Deadline returns the systemd watchdog deadline from $WATCHDOG_USEC. ok is false
+// when no watchdog is configured (variable unset or invalid).
+func Deadline() (time.Duration, bool) {
+	usec := os.Getenv("WATCHDOG_USEC")
+	if usec == "" {
+		return 0, false
+	}
+	n, err := strconv.Atoi(usec)
+	if err != nil || n <= 0 {
+		return 0, false
+	}
+	return time.Duration(n) * time.Microsecond, true
+}

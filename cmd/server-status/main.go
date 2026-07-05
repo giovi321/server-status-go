@@ -151,6 +151,11 @@ func main() {
 	}
 
 	watchdog.Ready()
+	if deadline, ok := watchdog.Deadline(); ok {
+		if interval := time.Duration(*loopSecs) * time.Second; interval >= deadline {
+			log.Printf("WARNING: -interval (%s) is >= the systemd watchdog deadline (%s); systemd will restart the agent every cycle. Raise WatchdogSec in the unit or lower -interval.", interval, deadline)
+		}
+	}
 
 	cycle := func() {
 		snap := detect.Snapshot(ctx, dev, cols)
