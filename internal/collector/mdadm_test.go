@@ -32,3 +32,27 @@ func TestParseMdstat(t *testing.T) {
 		t.Fatalf("md1 resync: active=%v pct=%d", md1.ResyncActive, md1.ResyncPct)
 	}
 }
+
+func TestParseMdstatInactiveDegraded(t *testing.T) {
+	in := "md2 : inactive sdf1[0](S)\n      976630488 blocks super 1.2\n\nunused devices: <none>\n"
+	arrays := parseMdstat(in)
+	if len(arrays) != 1 || arrays[0].Name != "md2" {
+		t.Fatalf("inactive array not parsed: %+v", arrays)
+	}
+	if arrays[0].State != "inactive" {
+		t.Fatalf("state: %q", arrays[0].State)
+	}
+	ms := raidMetrics(arrays[0])
+	found := false
+	for _, m := range ms {
+		if m.Key == "raid_degraded" {
+			found = true
+			if m.Value != true {
+				t.Fatalf("inactive array must report raid_degraded=true")
+			}
+		}
+	}
+	if !found {
+		t.Fatal("no raid_degraded metric emitted")
+	}
+}

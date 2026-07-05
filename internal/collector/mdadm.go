@@ -20,7 +20,7 @@ type RaidArray struct {
 }
 
 var (
-	mdHeader   = regexp.MustCompile(`^(md\d+)\s*:\s*(\S+)\s+(\S+)\s`)
+	mdHeader   = regexp.MustCompile(`^(md\d+)\s*:\s*(\S+)(?:\s+(\S+))?`)
 	mdCounts   = regexp.MustCompile(`\[(\d+)/(\d+)\]`)
 	mdRecovery = regexp.MustCompile(`(recovery|resync|reshape|check)\s*=\s*(\d+)(?:\.\d+)?%`)
 )
@@ -66,9 +66,10 @@ func raidMetrics(a RaidArray) []model.Metric {
 	m := func(key, leaf string, val any, kind model.Kind, dc, cat string) model.Metric {
 		return model.Metric{Key: key, Component: comp, ComponentName: name, Name: leaf, Value: val, Kind: kind, DeviceClass: dc, Category: cat}
 	}
+	degraded := a.Failed > 0 || (a.State != "active" && a.State != "clean")
 	out := []model.Metric{
 		m("raid_state", "State", a.State, model.KindText, "", "primary"),
-		m("raid_degraded", "Degraded", a.Failed > 0, model.KindBinarySensor, "problem", "primary"),
+		m("raid_degraded", "Degraded", degraded, model.KindBinarySensor, "problem", "primary"),
 		{Key: "raid_active_devices", Component: comp, ComponentName: name, Name: "Active devices", Value: a.Active, StateClass: "measurement", Kind: model.KindSensor, Category: "primary"},
 		{Key: "raid_total_devices", Component: comp, ComponentName: name, Name: "Total devices", Value: a.Total, StateClass: "measurement", Kind: model.KindSensor, Category: "diagnostic"},
 		{Key: "raid_failed_devices", Component: comp, ComponentName: name, Name: "Failed devices", Value: a.Failed, StateClass: "measurement", Kind: model.KindSensor, Category: "primary"},
