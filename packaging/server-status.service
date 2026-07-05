@@ -4,7 +4,8 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-Type=simple
+Type=notify
+WatchdogSec=180
 User=root
 EnvironmentFile=-/etc/server-status/server-status.env
 ExecStart=/opt/server-status/server-status -c /etc/server-status/config.yaml
