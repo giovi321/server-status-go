@@ -86,6 +86,40 @@ func parseMountinfo(data string) []Mount {
 	return out
 }
 
+// fsUsagePercent computes df-style used% from byte totals, guarding against
+// garbage statfs data (e.g. 9p/NFS where free may exceed total).
+func fsUsagePercent(total, free, avail uint64) int {
+	if free > total {
+		return 0
+	}
+	used := total - free
+	denom := used + avail
+	if denom == 0 {
+		return 0
+	}
+	p := int(float64(used)*100.0/float64(denom) + 0.5)
+	if p < 0 {
+		return 0
+	}
+	if p > 100 {
+		return 100
+	}
+	return p
+}
+
+// fsInodePercent computes inode usage%, guarding against garbage statfs data
+// (files==0, or ffree > files which would underflow a uint64 subtraction).
+func fsInodePercent(files, ffree uint64) int {
+	if files == 0 || ffree > files {
+		return 0
+	}
+	p := int(float64(files-ffree)*100.0/float64(files) + 0.5)
+	if p > 100 {
+		return 100
+	}
+	return p
+}
+
 func mountMetrics(m Mount) []model.Metric {
 	inst := m.Target
 	var st unix.Statfs_t
@@ -96,15 +130,12 @@ func mountMetrics(m Mount) []model.Metric {
 	total := st.Blocks * bs
 	free := st.Bfree * bs
 	avail := st.Bavail * bs
-	used := total - free
-	var usagePct int
-	if used+avail > 0 {
-		usagePct = int(float64(used)*100.0/float64(used+avail) + 0.5)
+	var used uint64
+	if total > free {
+		used = total - free
 	}
-	var inodePct int
-	if st.Files > 0 {
-		inodePct = int(float64(st.Files-st.Ffree)*100.0/float64(st.Files) + 0.5)
-	}
+	usagePct := fsUsagePercent(total, free, avail)
+	inodePct := fsInodePercent(st.Files, st.Ffree)
 	name := func(leaf string) string { return m.Target + " " + leaf }
 	return []model.Metric{
 		{Key: "fs_usage", Instance: inst, Name: name("usage"), Value: usagePct, Unit: "%", StateClass: "measurement", Kind: model.KindSensor, Category: "primary", Icon: "mdi:harddisk"},

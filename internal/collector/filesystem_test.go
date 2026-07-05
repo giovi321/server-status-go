@@ -64,3 +64,27 @@ func TestParseMountinfoUnescapesTarget(t *testing.T) {
 		t.Fatalf("expected decoded '/mnt/my drive', got %+v", mounts)
 	}
 }
+
+func TestFsUsagePercent(t *testing.T) {
+	if got := fsUsagePercent(1000, 250, 250); got != 75 { // used=750, denom=used+avail=1000
+		t.Fatalf("normal: %d", got)
+	}
+	if got := fsUsagePercent(1000, 2000, 0); got != 0 {
+		t.Fatalf("free>total guard: %d", got)
+	}
+	if got := fsUsagePercent(0, 0, 0); got != 0 {
+		t.Fatalf("zero: %d", got)
+	}
+}
+
+func TestFsInodePercent(t *testing.T) {
+	if got := fsInodePercent(1000, 250); got != 75 {
+		t.Fatalf("normal: %d", got)
+	}
+	if got := fsInodePercent(1000, 2000); got != 0 {
+		t.Fatalf("ffree>files underflow guard: %d", got)
+	}
+	if got := fsInodePercent(0, 0); got != 0 {
+		t.Fatalf("zero files: %d", got)
+	}
+}
