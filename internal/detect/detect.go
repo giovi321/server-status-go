@@ -31,6 +31,7 @@ func All(cfg config.Config) []collector.Collector {
 		collector.Mdadm{},
 		collector.Gpu{},
 		collector.Zfs{},
+		collector.NewDocker(),
 	}
 }
 
