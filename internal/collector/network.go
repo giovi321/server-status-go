@@ -79,8 +79,9 @@ func readNetDev() map[string]IfaceCounters {
 
 // Network publishes per-interface throughput. It is stateful: rates need two samples.
 type Network struct {
-	prev   map[string]IfaceCounters
-	prevAt time.Time
+	prev    map[string]IfaceCounters
+	prevAt  time.Time
+	sampler func() map[string]IfaceCounters // nil => read /proc/net/dev (test injection seam)
 }
 
 func (Network) Name() string { return "network" }
@@ -88,7 +89,11 @@ func (Network) Name() string { return "network" }
 func (Network) Available() bool { return len(readNetDev()) > 0 }
 
 func (n *Network) Collect(ctx context.Context) ([]model.Metric, error) {
-	cur := readNetDev()
+	read := n.sampler
+	if read == nil {
+		read = readNetDev
+	}
+	cur := read()
 	now := time.Now()
 	var out []model.Metric
 	if n.prev != nil {
