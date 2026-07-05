@@ -16,7 +16,11 @@ var instNonSlug = regexp.MustCompile(`[^a-z0-9]+`)
 func InstanceSlug(s string) string {
 	s = strings.ToLower(s)
 	s = instNonSlug.ReplaceAllString(s, "-")
-	return strings.Trim(s, "-")
+	s = strings.Trim(s, "-")
+	if s == "" {
+		return "root"
+	}
+	return s
 }
 
 // StateTopic is where a metric's value is published.

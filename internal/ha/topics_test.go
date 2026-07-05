@@ -33,6 +33,8 @@ func TestInstanceSlug(t *testing.T) {
 		"/dev/sda1":    "dev-sda1",
 		"Package id 0": "package-id-0",
 		"eth0":         "eth0",
+		"/":            "root",
+		"---":          "root",
 	}
 	for in, want := range cases {
 		if got := InstanceSlug(in); got != want {

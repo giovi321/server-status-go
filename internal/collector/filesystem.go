@@ -122,6 +122,10 @@ func fsInodePercent(files, ffree uint64) int {
 
 func mountMetrics(m Mount) []model.Metric {
 	inst := m.Target
+	label := m.Target
+	if label == "/" {
+		label = "root"
+	}
 	var st unix.Statfs_t
 	if err := unix.Statfs(m.Target, &st); err != nil || st.Blocks == 0 {
 		return nil
@@ -136,7 +140,7 @@ func mountMetrics(m Mount) []model.Metric {
 	}
 	usagePct := fsUsagePercent(total, free, avail)
 	inodePct := fsInodePercent(st.Files, st.Ffree)
-	name := func(leaf string) string { return m.Target + " " + leaf }
+	name := func(leaf string) string { return label + " " + leaf }
 	return []model.Metric{
 		{Key: "fs_usage", Instance: inst, Name: name("usage"), Value: usagePct, Unit: "%", StateClass: "measurement", Kind: model.KindSensor, Category: "primary", Icon: "mdi:harddisk"},
 		{Key: "fs_used_bytes", Instance: inst, Name: name("used"), Value: int64(used), Unit: "B", DeviceClass: "data_size", StateClass: "measurement", Kind: model.KindSensor, Category: "diagnostic"},
