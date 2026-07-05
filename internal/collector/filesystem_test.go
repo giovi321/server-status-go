@@ -36,3 +36,31 @@ func TestParseMountinfoFiltersPseudo(t *testing.T) {
 		t.Fatalf("storage: %+v ok=%v", st, ok)
 	}
 }
+
+func TestParseMountinfoDedupKeepsLast(t *testing.T) {
+	in := "100 1 8:1 / /data rw,relatime shared:1 - ext4 /dev/sdb1 rw\n" +
+		"101 1 8:2 / /data ro,relatime shared:2 - xfs /dev/sdc1 ro\n"
+	mounts := parseMountinfo(in)
+	n := 0
+	var got Mount
+	for _, m := range mounts {
+		if m.Target == "/data" {
+			n++
+			got = m
+		}
+	}
+	if n != 1 {
+		t.Fatalf("expected 1 /data entry, got %d", n)
+	}
+	if got.FSType != "xfs" || !got.ReadOnly {
+		t.Fatalf("expected last-seen xfs ro, got %+v", got)
+	}
+}
+
+func TestParseMountinfoUnescapesTarget(t *testing.T) {
+	in := "100 1 8:1 / /mnt/my\\040drive rw - ext4 /dev/sdd1 rw\n"
+	mounts := parseMountinfo(in)
+	if len(mounts) != 1 || mounts[0].Target != "/mnt/my drive" {
+		t.Fatalf("expected decoded '/mnt/my drive', got %+v", mounts)
+	}
+}

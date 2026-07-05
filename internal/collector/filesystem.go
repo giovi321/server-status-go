@@ -3,6 +3,7 @@ package collector
 import (
 	"context"
 	"os"
+	"strconv"
 	"strings"
 
 	"golang.org/x/sys/unix"
@@ -27,11 +28,30 @@ var pseudoFS = map[string]bool{
 	"autofs": true, "binfmt_misc": true, "rpc_pipefs": true, "nsfs": true, "ramfs": true,
 }
 
+// unescapeMountField decodes mountinfo octal escapes (\040 space, \011 tab, \012 newline, \134 backslash).
+func unescapeMountField(s string) string {
+	if !strings.Contains(s, `\`) {
+		return s
+	}
+	var b strings.Builder
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\\' && i+4 <= len(s) {
+			if n, err := strconv.ParseInt(s[i+1:i+4], 8, 16); err == nil {
+				b.WriteByte(byte(n))
+				i += 3
+				continue
+			}
+		}
+		b.WriteByte(s[i])
+	}
+	return b.String()
+}
+
 // parseMountinfo parses /proc/self/mountinfo and returns only real (block-backed) mounts.
-// Format: "id parent maj:min root mountpoint opts... - fstype source superopts".
+// When a target is mounted more than once (bind/stacked mounts), the last (visible) one wins.
 func parseMountinfo(data string) []Mount {
 	var out []Mount
-	seen := map[string]bool{}
+	idx := map[string]int{}
 	for _, line := range strings.Split(data, "\n") {
 		sep := strings.Index(line, " - ")
 		if sep < 0 {
@@ -42,24 +62,26 @@ func parseMountinfo(data string) []Mount {
 		if len(left) < 6 || len(right) < 2 {
 			continue
 		}
-		target := left[4]
+		target := unescapeMountField(left[4])
 		opts := left[5]
 		fstype := right[0]
-		source := right[1]
+		source := unescapeMountField(right[1])
 		if pseudoFS[fstype] {
 			continue
 		}
-		if seen[target] {
-			continue
-		}
-		seen[target] = true
 		ro := false
 		for _, o := range strings.Split(opts, ",") {
 			if o == "ro" {
 				ro = true
 			}
 		}
-		out = append(out, Mount{Source: source, Target: target, FSType: fstype, ReadOnly: ro})
+		m := Mount{Source: source, Target: target, FSType: fstype, ReadOnly: ro}
+		if p, ok := idx[target]; ok {
+			out[p] = m
+		} else {
+			idx[target] = len(out)
+			out = append(out, m)
+		}
 	}
 	return out
 }
@@ -70,10 +92,15 @@ func mountMetrics(m Mount) []model.Metric {
 	if err := unix.Statfs(m.Target, &st); err != nil || st.Blocks == 0 {
 		return nil
 	}
-	total := st.Blocks * uint64(st.Bsize)
-	free := st.Bfree * uint64(st.Bsize)
+	bs := uint64(st.Bsize)
+	total := st.Blocks * bs
+	free := st.Bfree * bs
+	avail := st.Bavail * bs
 	used := total - free
-	usagePct := int(float64(used)*100.0/float64(total) + 0.5)
+	var usagePct int
+	if used+avail > 0 {
+		usagePct = int(float64(used)*100.0/float64(used+avail) + 0.5)
+	}
 	var inodePct int
 	if st.Files > 0 {
 		inodePct = int(float64(st.Files-st.Ffree)*100.0/float64(st.Files) + 0.5)
