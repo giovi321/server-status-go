@@ -1,6 +1,10 @@
 package collector
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/giovi321/server-status/internal/model"
+)
 
 // `docker ps -a --format '{{json .}}'` — one JSON object per line.
 const dockerPSOut = `{"Image":"nginx:latest","Labels":"com.docker.compose.project=web,com.docker.compose.service=nginx","Names":"web-nginx-1","State":"running","Status":"Up 2 hours (healthy)"}
@@ -28,5 +32,33 @@ func TestParseDockerPS(t *testing.T) {
 	}
 	if by["flaky"].State != "restarting" {
 		t.Fatalf("flaky: %+v", by["flaky"])
+	}
+}
+
+func TestDockerMetrics(t *testing.T) {
+	cs := parseDockerPS(dockerPSOut)
+	updates := map[string]bool{"nginx:latest": true} // pretend nginx has an update
+	ms := dockerMetrics(cs, updates)
+	by := map[string]model.Metric{}
+	for _, m := range ms {
+		by[m.Key] = m
+	}
+	if by["docker_running"].Value != 2 {
+		t.Fatalf("running: %v", by["docker_running"].Value)
+	}
+	if by["docker_unhealthy"].Value != 1 {
+		t.Fatalf("unhealthy: %v", by["docker_unhealthy"].Value)
+	}
+	if by["docker_restarting"].Value != 1 {
+		t.Fatalf("restarting: %v", by["docker_restarting"].Value)
+	}
+	if by["docker_stopped"].Value != 1 { // the exited "cache"
+		t.Fatalf("stopped: %v", by["docker_stopped"].Value)
+	}
+	if by["docker_updates_available"].Value != 1 {
+		t.Fatalf("updates: %v", by["docker_updates_available"].Value)
+	}
+	if by["docker_running"].Component != "docker" || by["docker_running"].ComponentName != "Docker" {
+		t.Fatalf("sub-device: %+v", by["docker_running"])
 	}
 }

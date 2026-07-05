@@ -30,3 +30,26 @@ func updateAvailable(local, registry string) bool {
 	}
 	return local != registry
 }
+
+// parseManifestDigest extracts a digest from `docker manifest inspect --verbose`
+// output, which is either an object with .Descriptor.digest or an array of such.
+func parseManifestDigest(out string) string {
+	type entry struct {
+		Descriptor struct {
+			Digest string `json:"digest"`
+		} `json:"Descriptor"`
+	}
+	var one entry
+	if err := json.Unmarshal([]byte(out), &one); err == nil && one.Descriptor.Digest != "" {
+		return one.Descriptor.Digest
+	}
+	var many []entry
+	if err := json.Unmarshal([]byte(out), &many); err == nil {
+		for _, e := range many {
+			if e.Descriptor.Digest != "" {
+				return e.Descriptor.Digest
+			}
+		}
+	}
+	return ""
+}

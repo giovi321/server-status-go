@@ -37,3 +37,17 @@ func TestUpdateAvailable(t *testing.T) {
 		t.Fatal("empty local digest -> unknown -> no update")
 	}
 }
+
+func TestParseManifestDigest(t *testing.T) {
+	single := `{"Ref":"docker.io/library/nginx:latest","Descriptor":{"digest":"sha256:dddd"}}`
+	if got := parseManifestDigest(single); got != "sha256:dddd" {
+		t.Fatalf("single: %q", got)
+	}
+	list := `[{"Descriptor":{"digest":"sha256:eeee"}},{"Descriptor":{"digest":"sha256:ffff"}}]`
+	if got := parseManifestDigest(list); got != "sha256:eeee" {
+		t.Fatalf("list: %q", got)
+	}
+	if got := parseManifestDigest("garbage"); got != "" {
+		t.Fatalf("garbage: %q", got)
+	}
+}
