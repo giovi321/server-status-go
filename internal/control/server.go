@@ -3,7 +3,6 @@
 package control
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -21,10 +20,7 @@ type Server struct {
 	version string
 	mu      sync.RWMutex
 	snap    *model.Snapshot
-	disp    interface {
-		Run(ctx context.Context, name string) command.Result
-		Names() []string
-	}
+	disp    *command.Dispatcher
 }
 
 // NewServer builds an unstarted control server.
@@ -40,7 +36,11 @@ func (s *Server) Update(snap model.Snapshot) {
 }
 
 // SetDispatcher wires the command dispatcher for POST /command/{name}.
-func (s *Server) SetDispatcher(d *command.Dispatcher) { s.disp = d }
+func (s *Server) SetDispatcher(d *command.Dispatcher) {
+	s.mu.Lock()
+	s.disp = d
+	s.mu.Unlock()
+}
 
 func (s *Server) authOK(r *http.Request) bool {
 	if s.cfg.Token == "" {
@@ -76,11 +76,14 @@ func (s *Server) Handler() http.Handler {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
-		if s.disp == nil {
+		s.mu.RLock()
+		d := s.disp
+		s.mu.RUnlock()
+		if d == nil {
 			http.Error(w, "commands disabled", http.StatusServiceUnavailable)
 			return
 		}
-		res := s.disp.Run(r.Context(), r.PathValue("name"))
+		res := d.Run(r.Context(), r.PathValue("name"))
 		w.Header().Set("Content-Type", "application/json")
 		if !res.OK {
 			w.WriteHeader(http.StatusBadRequest)
