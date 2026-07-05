@@ -5,6 +5,7 @@ package control
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"sync"
 
@@ -42,11 +43,11 @@ func (s *Server) authOK(r *http.Request) bool {
 // Handler returns the control mux.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok", "version": s.version})
 	})
-	mux.HandleFunc("/snapshot", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /snapshot", func(w http.ResponseWriter, r *http.Request) {
 		if !s.authOK(r) {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
@@ -64,12 +65,15 @@ func (s *Server) Handler() http.Handler {
 	return mux
 }
 
-// Start runs the HTTP listener in a background goroutine. It returns any
-// immediate listen error via the returned channel-free helper: a bind failure
-// is logged by the caller, not fatal.
+// Start binds the listener synchronously (so a bind failure — e.g. the port is
+// already in use — is returned to the caller) and serves in a background goroutine.
 func (s *Server) Start() error {
 	addr := fmt.Sprintf("%s:%d", s.cfg.Bind, s.cfg.Port)
-	srv := &http.Server{Addr: addr, Handler: s.Handler()}
-	go func() { _ = srv.ListenAndServe() }()
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return err
+	}
+	srv := &http.Server{Handler: s.Handler()}
+	go func() { _ = srv.Serve(ln) }()
 	return nil
 }

@@ -54,4 +54,11 @@ func TestHealthAndSnapshot(t *testing.T) {
 	if snap.Device.Node != "n" || len(snap.Metrics) != 1 {
 		t.Fatalf("snapshot content: %+v", snap)
 	}
+
+	// method-scoped: POST /health is not allowed
+	rr = httptest.NewRecorder()
+	h.ServeHTTP(rr, httptest.NewRequest(http.MethodPost, "/health", nil))
+	if rr.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("POST /health should be 405, got %d", rr.Code)
+	}
 }
