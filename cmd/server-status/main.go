@@ -47,10 +47,10 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	cols := detect.Available(detect.All())
+	cols := detect.Available(detect.All(cfg))
 
 	if *dump {
-		if err := detect.DumpJSON(os.Stdout, dev, detect.All(), ctx); err != nil {
+		if err := detect.DumpJSON(os.Stdout, dev, detect.All(cfg), ctx); err != nil {
 			log.Fatalf("dump: %v", err)
 		}
 		return

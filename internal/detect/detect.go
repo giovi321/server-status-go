@@ -8,13 +8,14 @@ import (
 	"time"
 
 	"github.com/giovi321/server-status/internal/collector"
+	"github.com/giovi321/server-status/internal/config"
 	"github.com/giovi321/server-status/internal/model"
 )
 
 type collectorIface = collector.Collector
 
 // All returns every built-in collector, regardless of availability.
-func All() []collector.Collector {
+func All(cfg config.Config) []collector.Collector {
 	return []collector.Collector{
 		collector.CPU{},
 		collector.Memory{},
@@ -26,6 +27,8 @@ func All() []collector.Collector {
 		collector.Temperature{},
 		collector.Apt{},
 		collector.Systemd{},
+		collector.NewSmart(cfg),
+		collector.Mdadm{},
 	}
 }
 
