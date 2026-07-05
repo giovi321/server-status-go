@@ -54,6 +54,9 @@ func TestWebhookPublishPostsSnapshot(t *testing.T) {
 	if payload.Device.Identifier != "server-status-n" {
 		t.Fatalf("device: %+v", payload.Device)
 	}
+	if payload.Metrics[0].Unit != "%" || payload.Metrics[0].Name != "CPU usage" {
+		t.Fatalf("parity: metric fields not preserved: %+v", payload.Metrics[0])
+	}
 }
 
 func TestWebhookOnChangeSkipsUnchanged(t *testing.T) {
@@ -77,5 +80,43 @@ func TestWebhookOnChangeSkipsUnchanged(t *testing.T) {
 	defer mu.Unlock()
 	if posts != 2 {
 		t.Fatalf("on_change: expected 2 posts (first + changed), got %d", posts)
+	}
+}
+
+func TestWebhookOnChangeResendsAfterFailedDelivery(t *testing.T) {
+	var mu sync.Mutex
+	fail := true
+	posts := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		posts++
+		f := fail
+		mu.Unlock()
+		if f {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	wh := NewWebhook(config.SinkConfig{Type: "webhook", URL: srv.URL, OnChange: true})
+	snap := testSnapshot()
+	if err := wh.Publish(snap); err == nil {
+		t.Fatal("expected an error when the endpoint returns 500")
+	}
+	// Endpoint recovers. The SAME metrics MUST be re-sent (not skipped by on_change),
+	// because the prior delivery failed and lastMetrics must not have been committed.
+	mu.Lock()
+	fail = false
+	before := posts
+	mu.Unlock()
+	if err := wh.Publish(snap); err != nil {
+		t.Fatalf("recovery publish failed: %v", err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if posts <= before {
+		t.Fatal("on_change must re-send after a prior failed delivery (lastMetrics committed too early)")
 	}
 }

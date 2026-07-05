@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 
@@ -28,14 +29,16 @@ func NewWebhook(sc config.SinkConfig) *Webhook {
 func (w *Webhook) Connect() error { return nil }
 
 // Publish POSTs the snapshot as JSON with retry. With on_change it skips a POST
-// when the metrics are unchanged since the last publish (ignoring the timestamp).
+// when the metrics are unchanged since the last SUCCESSFUL publish (ignoring the
+// timestamp), so a failed delivery is retried on the next cycle rather than lost.
 func (w *Webhook) Publish(snap model.Snapshot) error {
+	var mj string
 	if w.sc.OnChange {
-		mj, _ := json.Marshal(snap.Metrics)
-		if string(mj) == w.lastMetrics {
+		b, _ := json.Marshal(snap.Metrics)
+		mj = string(b)
+		if mj == w.lastMetrics {
 			return nil
 		}
-		w.lastMetrics = string(mj)
 	}
 	body, err := json.Marshal(snap)
 	if err != nil {
@@ -54,15 +57,21 @@ func (w *Webhook) Publish(snap model.Snapshot) error {
 		resp, err := w.client.Do(req)
 		if err == nil {
 			code := resp.StatusCode
+			_, _ = io.Copy(io.Discard, resp.Body)
 			resp.Body.Close()
 			if code < 300 {
+				if w.sc.OnChange {
+					w.lastMetrics = mj // commit only after successful delivery
+				}
 				return nil
 			}
 			lastErr = fmt.Errorf("webhook POST to %s returned %d", w.sc.URL, code)
 		} else {
 			lastErr = err
 		}
-		time.Sleep(time.Duration(attempt+1) * 300 * time.Millisecond)
+		if attempt < 2 {
+			time.Sleep(time.Duration(attempt+1) * 300 * time.Millisecond)
+		}
 	}
 	return lastErr
 }
