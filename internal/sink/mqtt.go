@@ -83,7 +83,7 @@ func (m *MQTT) Publish(snap model.Snapshot) error {
 			m.discovered[key] = true
 			m.mu.Unlock()
 		}
-		stateTopic := ha.StateTopic(m.sc.BaseTopic, snap.Device.Node, metric.Component, metric.Key)
+		stateTopic := ha.StateTopic(m.sc.BaseTopic, snap.Device.Node, metric.Component, metric.Key, metric.Instance)
 		m.client.Publish(stateTopic, byte(m.sc.QoS), m.sc.Retain, ha.StateValue(metric))
 	}
 	return nil

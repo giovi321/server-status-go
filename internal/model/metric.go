@@ -17,6 +17,7 @@ const (
 type Metric struct {
 	Key         string
 	Component   string
+	Instance    string
 	Name        string
 	Value       any
 	Unit        string

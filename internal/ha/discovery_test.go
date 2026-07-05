@@ -94,6 +94,32 @@ func TestDiscoveryBinarySensor(t *testing.T) {
 	}
 }
 
+func TestDiscoveryInstance(t *testing.T) {
+	dev := model.Device{Node: "gc01srvr", Identifier: "server-status-gc01srvr", Name: "gc01srvr"}
+	m := model.Metric{Key: "fs_usage", Instance: "root", Name: "Root usage", Value: 42, Unit: "%", StateClass: "measurement", Kind: model.KindSensor}
+	sc := config.SinkConfig{BaseTopic: "server-status", DiscoveryPrefix: "homeassistant"}
+	topic, payload, err := Discovery(dev, m, sc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if topic != "homeassistant/sensor/gc01srvr/gc01srvr_fs_usage_root/config" {
+		t.Fatalf("topic: %q", topic)
+	}
+	var obj map[string]any
+	if err := json.Unmarshal(payload, &obj); err != nil {
+		t.Fatal(err)
+	}
+	if obj["state_topic"] != "server-status/gc01srvr/fs_usage/root" {
+		t.Fatalf("state_topic: %v", obj["state_topic"])
+	}
+	if obj["unique_id"] != "server-status-gc01srvr-fs_usage-root" {
+		t.Fatalf("unique_id: %v", obj["unique_id"])
+	}
+	if obj["name"] != "Root usage" {
+		t.Fatalf("name: %v", obj["name"])
+	}
+}
+
 func TestDiscoveryViaDeviceWhenParentSet(t *testing.T) {
 	dev := model.Device{Node: "vm-web", Identifier: "server-status-vm-web", Parent: "gc01srvr"}
 	m := model.Metric{Key: "cpu_usage", Name: "CPU usage", Value: 5, Unit: "%", StateClass: "measurement", Kind: model.KindSensor}

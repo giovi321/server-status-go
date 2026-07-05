@@ -3,17 +3,33 @@ package ha
 
 import (
 	"fmt"
+	"regexp"
 	"strconv"
+	"strings"
 
 	"github.com/giovi321/server-status/internal/model"
 )
 
+var instNonSlug = regexp.MustCompile(`[^a-z0-9]+`)
+
+// InstanceSlug turns an instance label (mount, interface, sensor) into a stable [a-z0-9-] slug.
+func InstanceSlug(s string) string {
+	s = strings.ToLower(s)
+	s = instNonSlug.ReplaceAllString(s, "-")
+	return strings.Trim(s, "-")
+}
+
 // StateTopic is where a metric's value is published.
-func StateTopic(base, node, component, key string) string {
-	if component == "" {
-		return fmt.Sprintf("%s/%s/%s", base, node, key)
+func StateTopic(base, node, component, key, instance string) string {
+	parts := base + "/" + node
+	if component != "" {
+		parts += "/" + component
 	}
-	return fmt.Sprintf("%s/%s/%s/%s", base, node, component, key)
+	parts += "/" + key
+	if instance != "" {
+		parts += "/" + InstanceSlug(instance)
+	}
+	return parts
 }
 
 // AvailabilityTopic is the per-host LWT topic.
@@ -22,19 +38,27 @@ func AvailabilityTopic(base, node string) string {
 }
 
 // ObjectID is the human-readable slug used to build the entity_id.
-func ObjectID(node, component, key string) string {
-	if component == "" {
-		return node + "_" + key
+func ObjectID(node, component, key, instance string) string {
+	id := node + "_" + key
+	if component != "" {
+		id = node + "_" + component + "_" + key
 	}
-	return node + "_" + component + "_" + key
+	if instance != "" {
+		id += "_" + InstanceSlug(instance)
+	}
+	return id
 }
 
-// UniqueID is the hidden, stable id. It may contain serials via the component.
+// UniqueID is the hidden, stable id. It may contain serials/instances via component/instance.
 func UniqueID(dev model.Device, m model.Metric) string {
-	if m.Component == "" {
-		return dev.Identifier + "-" + m.Key
+	id := dev.Identifier + "-" + m.Key
+	if m.Component != "" {
+		id = dev.Identifier + "-" + m.Component + "-" + m.Key
 	}
-	return dev.Identifier + "-" + m.Component + "-" + m.Key
+	if m.Instance != "" {
+		id += "-" + InstanceSlug(m.Instance)
+	}
+	return id
 }
 
 // Component maps a metric kind to its Home Assistant discovery component.

@@ -38,10 +38,10 @@ type discoveryPayload struct {
 
 // Discovery builds the retained discovery config topic and JSON payload for a metric.
 func Discovery(dev model.Device, m model.Metric, sc config.SinkConfig) (string, []byte, error) {
-	objectID := ObjectID(dev.Node, m.Component, m.Key)
+	objectID := ObjectID(dev.Node, m.Component, m.Key, m.Instance)
 	p := discoveryPayload{
 		Name:              m.Name,
-		StateTopic:        StateTopic(sc.BaseTopic, dev.Node, m.Component, m.Key),
+		StateTopic:        StateTopic(sc.BaseTopic, dev.Node, m.Component, m.Key, m.Instance),
 		UniqueID:          UniqueID(dev, m),
 		ObjectID:          objectID,
 		HasEntityName:     true,
