@@ -8,14 +8,17 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"runtime"
 	"syscall"
 	"time"
 
+	"github.com/giovi321/server-status/internal/command"
 	"github.com/giovi321/server-status/internal/config"
 	"github.com/giovi321/server-status/internal/control"
 	"github.com/giovi321/server-status/internal/detect"
 	"github.com/giovi321/server-status/internal/ident"
 	"github.com/giovi321/server-status/internal/sink"
+	"github.com/giovi321/server-status/internal/update"
 	"github.com/giovi321/server-status/internal/version"
 )
 
@@ -57,11 +60,38 @@ func main() {
 		return
 	}
 
+	refreshCh := make(chan struct{}, 1)
+	disp := command.New()
+	disp.Register("refresh", func(context.Context) command.Result {
+		select {
+		case refreshCh <- struct{}{}:
+		default:
+		}
+		return command.Result{OK: true, Message: "refresh queued"}
+	})
+	disp.Register("restart", command.RestartHandler("server-status"))
+	disp.Register("update", func(ctx context.Context) command.Result {
+		assetName := fmt.Sprintf("server-status-linux-%s", runtime.GOARCH)
+		rel, err := update.Latest(ctx, "https://api.github.com", cfg.Update.Repo, assetName)
+		if err != nil {
+			return command.Result{OK: false, Message: "check failed: " + err.Error()}
+		}
+		self, err := os.Executable()
+		if err != nil {
+			return command.Result{OK: false, Message: "executable path: " + err.Error()}
+		}
+		if err := update.Apply(ctx, nil, rel, self); err != nil {
+			return command.Result{OK: false, Message: "apply failed: " + err.Error()}
+		}
+		go command.RestartHandler("server-status")(context.Background())
+		return command.Result{OK: true, Message: "updated to " + rel.Version + ", restarting"}
+	})
+
 	var sinks []sink.Sink
 	for _, sc := range cfg.Sinks {
 		switch sc.Type {
 		case "mqtt":
-			sinks = append(sinks, sink.NewMQTT(sc, dev, nil))
+			sinks = append(sinks, sink.NewMQTT(sc, dev, disp))
 		case "webhook":
 			sinks = append(sinks, sink.NewWebhook(sc))
 		default:
@@ -98,6 +128,9 @@ func main() {
 			ctrl = nil
 		}
 	}
+	if ctrl != nil {
+		ctrl.SetDispatcher(disp)
+	}
 
 	cycle := func() {
 		snap := detect.Snapshot(ctx, dev, cols)
@@ -123,6 +156,8 @@ func main() {
 			log.Print("shutting down")
 			return
 		case <-ticker.C:
+			cycle()
+		case <-refreshCh:
 			cycle()
 		}
 	}

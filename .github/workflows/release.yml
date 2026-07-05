@@ -1,0 +1,28 @@
+name: release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+      - name: Build binaries
+        run: |
+          mkdir dist
+          for arch in amd64 arm64; do
+            out="dist/server-status-linux-$arch"
+            CGO_ENABLED=0 GOOS=linux GOARCH=$arch go build \
+              -ldflags "-s -w -X github.com/giovi321/server-status/internal/version.Version=${GITHUB_REF_NAME}" \
+              -o "$out" ./cmd/server-status
+            ( cd dist && sha256sum "server-status-linux-$arch" > "server-status-linux-$arch.sha256" )
+          done
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${GITHUB_REF_NAME}" dist/* --title "${GITHUB_REF_NAME}" --generate-notes
