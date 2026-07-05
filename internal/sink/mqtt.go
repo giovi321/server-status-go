@@ -152,6 +152,38 @@ func (m *MQTT) publishControlDiscoveryOnce(dev model.Device) error {
 	return nil
 }
 
+// Purge clears all retained discovery for this host so Home Assistant removes the
+// device. It publishes empty retained payloads to every discovery config topic
+// (metrics, control buttons, update entity) and to the availability topic, then
+// disconnects gracefully so the LWT does not republish an offline availability.
+func (m *MQTT) Purge(snap model.Snapshot) error {
+	if m.client == nil || !m.client.IsConnected() {
+		return fmt.Errorf("mqtt sink not connected; cannot purge %s", snap.Device.Node)
+	}
+	clear := func(topic string) {
+		m.client.Publish(topic, byte(m.sc.QoS), true, "").WaitTimeout(2 * time.Second)
+	}
+	for _, metric := range snap.Metrics {
+		if topic, _, err := ha.Discovery(snap.Device, metric, m.sc); err == nil {
+			clear(topic)
+		}
+	}
+	if m.disp != nil {
+		if t, _, err := ha.ButtonDiscovery(snap.Device, m.sc, "refresh", "Refresh"); err == nil {
+			clear(t)
+		}
+		if t, _, err := ha.ButtonDiscovery(snap.Device, m.sc, "restart", "Restart"); err == nil {
+			clear(t)
+		}
+		if t, _, err := ha.UpdateDiscovery(snap.Device, m.sc); err == nil {
+			clear(t)
+		}
+	}
+	clear(m.availTopic)
+	m.client.Disconnect(250)
+	return nil
+}
+
 // Close publishes offline and disconnects.
 func (m *MQTT) Close() error {
 	if m.client == nil {

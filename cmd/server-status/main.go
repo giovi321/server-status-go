@@ -20,6 +20,7 @@ import (
 	"github.com/giovi321/server-status/internal/sink"
 	"github.com/giovi321/server-status/internal/update"
 	"github.com/giovi321/server-status/internal/version"
+	"github.com/giovi321/server-status/internal/watchdog"
 )
 
 func main() {
@@ -29,6 +30,7 @@ func main() {
 		dump     = flag.Bool("dump-detected", false, "print detected collectors and metrics as JSON, then exit")
 		showVer  = flag.Bool("version", false, "print version and exit")
 		loopSecs = flag.Int("interval", 60, "seconds between cycles")
+		purge    = flag.Bool("purge", false, "clear this host's retained MQTT discovery and exit")
 	)
 	flag.StringVar(cfgPath, "config", "", "path to YAML config file")
 	flag.Parse()
@@ -123,6 +125,19 @@ func main() {
 		}
 	}()
 
+	if *purge {
+		snap := detect.Snapshot(ctx, dev, cols)
+		for _, sk := range sinks {
+			if mq, ok := sk.(*sink.MQTT); ok {
+				if err := mq.Purge(snap); err != nil {
+					log.Printf("purge: %v", err)
+				}
+			}
+		}
+		log.Print("purged retained discovery; exiting")
+		return
+	}
+
 	var ctrl *control.Server
 	if cfg.Control.HTTP.Enabled {
 		ctrl = control.NewServer(cfg.Control.HTTP, version.Version)
@@ -135,6 +150,8 @@ func main() {
 		ctrl.SetDispatcher(disp)
 	}
 
+	watchdog.Ready()
+
 	cycle := func() {
 		snap := detect.Snapshot(ctx, dev, cols)
 		for _, sk := range sinks {
@@ -145,6 +162,7 @@ func main() {
 		if ctrl != nil {
 			ctrl.Update(snap)
 		}
+		watchdog.Ping()
 	}
 
 	cycle()

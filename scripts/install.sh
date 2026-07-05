@@ -10,9 +10,13 @@ SRC_BIN=${SRC_BIN:-./server-status}
 
 if [[ "${1:-}" == "--uninstall" ]]; then
   systemctl disable --now server-status.service 2>/dev/null || true
+  if [[ -x "$BIN_DIR/server-status" && -f "$CFG_DIR/config.yaml" ]]; then
+    if [[ -f "$CFG_DIR/server-status.env" ]]; then set -a; . "$CFG_DIR/server-status.env"; set +a; fi
+    "$BIN_DIR/server-status" -c "$CFG_DIR/config.yaml" --purge 2>/dev/null || true
+  fi
   rm -f "$UNIT"
   systemctl daemon-reload
-  echo "Uninstalled service. Left $CFG_DIR and $BIN_DIR in place."
+  echo "Uninstalled service and cleared Home Assistant discovery. Left $CFG_DIR and $BIN_DIR in place."
   exit 0
 fi
 
