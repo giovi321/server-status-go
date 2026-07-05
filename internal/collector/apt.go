@@ -51,8 +51,8 @@ func (Apt) Collect(ctx context.Context) ([]model.Metric, error) {
 	_, rebootErr := os.Stat("/var/run/reboot-required")
 	rebootRequired := rebootErr == nil
 	return []model.Metric{
-		{Key: "apt_updates", Name: "APT updates", Value: total, StateClass: "total", Kind: model.KindSensor, Category: "primary", Icon: "mdi:package-up"},
-		{Key: "apt_security_updates", Name: "APT security updates", Value: sec, StateClass: "total", Kind: model.KindSensor, Category: "primary", Icon: "mdi:shield-alert"},
+		{Key: "apt_updates", Name: "APT updates", Value: total, StateClass: "measurement", Kind: model.KindSensor, Category: "primary", Icon: "mdi:package-up"},
+		{Key: "apt_security_updates", Name: "APT security updates", Value: sec, StateClass: "measurement", Kind: model.KindSensor, Category: "primary", Icon: "mdi:shield-alert"},
 		{Key: "reboot_required", Name: "Reboot required", Value: rebootRequired, DeviceClass: "update", Kind: model.KindBinarySensor, Category: "primary"},
 	}, nil
 }
