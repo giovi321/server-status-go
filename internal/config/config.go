@@ -19,6 +19,9 @@ type SinkConfig struct {
 	DiscoveryPrefix string `yaml:"discovery_prefix"`
 	Retain          bool   `yaml:"retain"`
 	QoS             int    `yaml:"qos"`
+	URL             string `yaml:"url"`
+	Token           string `yaml:"token"`
+	OnChange        bool   `yaml:"on_change"`
 }
 
 // Config is the whole agent configuration.
@@ -30,6 +33,20 @@ type Config struct {
 	Sinks           []SinkConfig      `yaml:"sinks"`
 	Disks           map[string]string `yaml:"disks"`
 	SmartAttributes string            `yaml:"smart_attributes"`
+	Control         ControlConfig     `yaml:"control"`
+}
+
+// ControlConfig configures the inbound control surface.
+type ControlConfig struct {
+	HTTP HTTPConfig `yaml:"http"`
+}
+
+// HTTPConfig configures the read-only HTTP control server.
+type HTTPConfig struct {
+	Enabled bool   `yaml:"enabled"`
+	Bind    string `yaml:"bind"`
+	Port    int    `yaml:"port"`
+	Token   string `yaml:"token"`
 }
 
 // DiskName returns the configured friendly alias for a disk serial/WWN, or fallback.

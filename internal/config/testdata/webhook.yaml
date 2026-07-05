@@ -1,0 +1,15 @@
+node: gc01srvr
+sinks:
+  - type: mqtt
+    host: 192.168.1.65
+    password: ${TEST_MQTT_PASSWORD}
+  - type: webhook
+    url: https://n8n.example/webhook/ss
+    token: ${TEST_MQTT_PASSWORD}
+    on_change: true
+control:
+  http:
+    enabled: true
+    bind: 0.0.0.0
+    port: 9971
+    token: ${TEST_MQTT_PASSWORD}

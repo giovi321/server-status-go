@@ -70,3 +70,21 @@ func TestLoadDisksAliasMap(t *testing.T) {
 		t.Fatalf("DiskName fallback: %q", got)
 	}
 }
+
+func TestLoadWebhookAndControl(t *testing.T) {
+	t.Setenv("TEST_MQTT_PASSWORD", "s3cret")
+	cfg, err := Load("testdata/webhook.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Sinks) != 2 {
+		t.Fatalf("sinks: %d", len(cfg.Sinks))
+	}
+	wh := cfg.Sinks[1]
+	if wh.Type != "webhook" || wh.URL != "https://n8n.example/webhook/ss" || wh.Token != "s3cret" || !wh.OnChange {
+		t.Fatalf("webhook: %+v", wh)
+	}
+	if !cfg.Control.HTTP.Enabled || cfg.Control.HTTP.Port != 9971 || cfg.Control.HTTP.Token != "s3cret" {
+		t.Fatalf("control http: %+v", cfg.Control.HTTP)
+	}
+}
