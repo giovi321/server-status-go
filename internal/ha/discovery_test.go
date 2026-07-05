@@ -188,3 +188,28 @@ func TestDiscoverySubDeviceFlat(t *testing.T) {
 		t.Fatalf("flat host device must not have via_device here, got %v", device["via_device"])
 	}
 }
+
+func TestDiscoverySubDeviceWithParent(t *testing.T) {
+	// A grouped sub-device on a host that itself has a Parent: the sub-device's
+	// via_device must point at the HOST, not the grandparent. The host->parent
+	// link lives on the host's own (Component=="") entities.
+	dev := model.Device{Node: "vm1", Name: "vm1", Identifier: "server-status-vm1", Parent: "gc01srvr", Hierarchy: "grouped"}
+	m := model.Metric{Key: "disk_temperature", Component: "disk-x", ComponentName: "Disk sda", Name: "Temperature", Value: 40, Unit: "°C", DeviceClass: "temperature", StateClass: "measurement", Kind: model.KindSensor}
+	sc := config.SinkConfig{BaseTopic: "server-status", DiscoveryPrefix: "homeassistant"}
+	_, payload, err := Discovery(dev, m, sc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var obj map[string]any
+	if err := json.Unmarshal(payload, &obj); err != nil {
+		t.Fatal(err)
+	}
+	device := obj["device"].(map[string]any)
+	if device["via_device"] != "server-status-vm1" {
+		t.Fatalf("sub-device via_device must be the host, not the parent: %v", device["via_device"])
+	}
+	ids := device["identifiers"].([]any)
+	if ids[0] != "server-status-vm1-disk-x" {
+		t.Fatalf("sub-device identifier: %v", ids[0])
+	}
+}
