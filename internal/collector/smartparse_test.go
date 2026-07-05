@@ -1,6 +1,13 @@
 package collector
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/giovi321/server-status/internal/config"
+	"github.com/giovi321/server-status/internal/model"
+)
 
 // Trimmed but realistic `smartctl --json -a` output for an ATA HDD.
 const smartctlATA = `{
@@ -87,5 +94,55 @@ func TestParseSmartctlNVMe(t *testing.T) {
 	// ATA-only attributes absent for NVMe
 	if si.CRCErrors != nil || si.Reallocated != nil {
 		t.Fatalf("ata attrs should be nil for NVMe: %+v", si)
+	}
+}
+
+func TestSmartMetricsCuratedNVMe(t *testing.T) {
+	si, _ := parseSmartctl([]byte(smartctlNVMe))
+	cfg := config.Config{SmartAttributes: "curated", Disks: map[string]string{"S5GXNX0R123456": "OS drive"}}
+	ms := smartMetrics(cfg, "nvme0n1", si)
+	keys := map[string]model.Metric{}
+	for _, m := range ms {
+		keys[m.Key] = m
+	}
+	if _, ok := keys["disk_percentage_used"]; !ok {
+		t.Fatal("nvme should emit disk_percentage_used")
+	}
+	if _, ok := keys["disk_crc_errors"]; ok {
+		t.Fatal("nvme should NOT emit ata-only disk_crc_errors")
+	}
+	// alias applied and component derived from serial
+	if keys["disk_temperature"].ComponentName != "OS drive" {
+		t.Fatalf("alias: %q", keys["disk_temperature"].ComponentName)
+	}
+	if keys["disk_temperature"].Component != "disk-s5gxnx0r123456" {
+		t.Fatalf("component: %q", keys["disk_temperature"].Component)
+	}
+	// no raw dump in curated mode
+	if _, ok := keys["disk_smart_raw"]; ok {
+		t.Fatal("curated mode must not emit disk_smart_raw")
+	}
+}
+
+func TestPhysicalDisksFilters(t *testing.T) {
+	root := t.TempDir()
+	for _, n := range []string{"sda", "nvme0n1", "vdb", "loop0", "ram0", "dm-0", "md0", "sr0", "zram0"} {
+		if err := os.Mkdir(filepath.Join(root, n), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got := map[string]bool{}
+	for _, d := range physicalDisks(root) {
+		got[d] = true
+	}
+	for _, want := range []string{"sda", "nvme0n1", "vdb"} {
+		if !got[want] {
+			t.Errorf("expected physical disk %q", want)
+		}
+	}
+	for _, no := range []string{"loop0", "ram0", "dm-0", "md0", "sr0", "zram0"} {
+		if got[no] {
+			t.Errorf("%q should be excluded", no)
+		}
 	}
 }

@@ -43,6 +43,17 @@ func TestLoadAppliesDefaults(t *testing.T) {
 	}
 }
 
+func TestSmartAttributesDefault(t *testing.T) {
+	t.Setenv("TEST_MQTT_PASSWORD", "x")
+	cfg, err := Load("testdata/disks.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.SmartAttributes != "curated" {
+		t.Fatalf("default smart_attributes: %q", cfg.SmartAttributes)
+	}
+}
+
 func TestLoadDisksAliasMap(t *testing.T) {
 	t.Setenv("TEST_MQTT_PASSWORD", "x")
 	cfg, err := Load("testdata/disks.yaml")

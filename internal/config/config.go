@@ -23,12 +23,13 @@ type SinkConfig struct {
 
 // Config is the whole agent configuration.
 type Config struct {
-	Node         string            `yaml:"node"`
-	FriendlyName string            `yaml:"friendly_name"`
-	Parent       string            `yaml:"parent"`
-	Hierarchy    string            `yaml:"hierarchy"`
-	Sinks        []SinkConfig      `yaml:"sinks"`
-	Disks        map[string]string `yaml:"disks"`
+	Node            string            `yaml:"node"`
+	FriendlyName    string            `yaml:"friendly_name"`
+	Parent          string            `yaml:"parent"`
+	Hierarchy       string            `yaml:"hierarchy"`
+	Sinks           []SinkConfig      `yaml:"sinks"`
+	Disks           map[string]string `yaml:"disks"`
+	SmartAttributes string            `yaml:"smart_attributes"`
 }
 
 // DiskName returns the configured friendly alias for a disk serial/WWN, or fallback.
@@ -67,6 +68,9 @@ func Load(path string) (Config, error) {
 func (c *Config) applyDefaults() {
 	if c.Hierarchy == "" {
 		c.Hierarchy = "grouped"
+	}
+	if c.SmartAttributes == "" {
+		c.SmartAttributes = "curated"
 	}
 	for i := range c.Sinks {
 		s := &c.Sinks[i]
