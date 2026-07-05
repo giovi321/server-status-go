@@ -29,6 +29,8 @@ func All(cfg config.Config) []collector.Collector {
 		collector.Systemd{},
 		collector.NewSmart(cfg),
 		collector.Mdadm{},
+		collector.Gpu{},
+		collector.Zfs{},
 	}
 }
 
