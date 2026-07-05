@@ -11,7 +11,10 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 )
+
+var applyMu sync.Mutex
 
 // Release is a resolved latest release: the tag, the asset URL, and its sha256.
 type Release struct {
@@ -98,6 +101,8 @@ func fetchSha256(ctx context.Context, url, assetName string) (string, error) {
 // destPath (keeping the previous binary as destPath.bak). A bad download leaves
 // destPath untouched.
 func Apply(ctx context.Context, client *http.Client, rel Release, destPath string) error {
+	applyMu.Lock()
+	defer applyMu.Unlock()
 	if client == nil {
 		client = http.DefaultClient
 	}

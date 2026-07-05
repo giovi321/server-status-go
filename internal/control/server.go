@@ -76,6 +76,10 @@ func (s *Server) Handler() http.Handler {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
+		if s.cfg.Token == "" {
+			http.Error(w, "commands require a control token", http.StatusForbidden)
+			return
+		}
 		s.mu.RLock()
 		d := s.disp
 		s.mu.RUnlock()

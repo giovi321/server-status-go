@@ -66,12 +66,25 @@ func TestHealthAndSnapshot(t *testing.T) {
 }
 
 func TestPostCommandDisabledWithoutDispatcher(t *testing.T) {
-	s := NewServer(config.HTTPConfig{}, "v1")
+	s := NewServer(config.HTTPConfig{Token: "tok"}, "v1")
+	h := s.Handler()
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/command/refresh", nil)
+	req.Header.Set("Authorization", "Bearer tok")
+	h.ServeHTTP(rr, req)
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Fatalf("POST /command without dispatcher: %d", rr.Code)
+	}
+}
+
+func TestPostCommandRequiresToken(t *testing.T) {
+	s := NewServer(config.HTTPConfig{}, "v1") // no token configured
+	s.SetDispatcher(command.New())
 	h := s.Handler()
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, httptest.NewRequest(http.MethodPost, "/command/refresh", nil))
-	if rr.Code != http.StatusServiceUnavailable {
-		t.Fatalf("POST /command without dispatcher: %d", rr.Code)
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("POST /command with no configured token must be 403, got %d", rr.Code)
 	}
 }
 

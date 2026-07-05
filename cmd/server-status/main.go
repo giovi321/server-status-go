@@ -76,6 +76,9 @@ func main() {
 		if err != nil {
 			return command.Result{OK: false, Message: "check failed: " + err.Error()}
 		}
+		if rel.Version == version.Version {
+			return command.Result{OK: true, Message: "already up to date (" + rel.Version + ")"}
+		}
 		self, err := os.Executable()
 		if err != nil {
 			return command.Result{OK: false, Message: "executable path: " + err.Error()}

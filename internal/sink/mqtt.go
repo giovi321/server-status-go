@@ -69,6 +69,9 @@ func (m *MQTT) Connect() error {
 		c.Publish(m.availTopic, byte(m.sc.QoS), true, "online")
 		if m.disp != nil {
 			c.Subscribe(m.sc.BaseTopic+"/"+m.dev.Node+"/cmd/+", byte(m.sc.QoS), func(_ mqtt.Client, msg mqtt.Message) {
+				if msg.Retained() {
+					return
+				}
 				parts := strings.Split(msg.Topic(), "/")
 				name := parts[len(parts)-1]
 				res := m.disp.Run(context.Background(), name)
