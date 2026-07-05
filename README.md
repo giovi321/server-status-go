@@ -1,135 +1,88 @@
-# Server Status MQTT Publisher
+# server-status
 
-Publishes key server metrics (CPU, memory, uptime, disk usage, RAID, drive health, and optional NVIDIA GPU) to an MQTT broker with Home Assistant autodiscovery support.  
-All configuration is YAML-based; each module can be toggled individually.
+A single Go binary that autodetects a Linux host's metrics and publishes them to MQTT with Home Assistant discovery, so every server appears as its own device. It is a pure state publisher: thresholds and notifications live in Home Assistant (or n8n), not in the agent.
 
+This is the Go rewrite of the original Python `server-status` tool, which is archived at [giovi321/server-status](https://github.com/giovi321/server-status).
 
+## Status
 
-## Features
+Under active development. The foundation and the core auto-detected collectors are done and validated against a live Home Assistant. Storage health, GPU, docker, webhook parity, and the self-update button are on the roadmap below.
 
-| Metric Type            | Source                     | MQTT Topic Prefix              | Notes                                      |
-|------------------------|----------------------------|--------------------------------|--------------------------------------------|
-| CPU usage / temp       | `/proc/stat`, `sensors`    | `<base>/cpu_*`                 | Temp label customizable                    |
-| Memory available %     | `/proc/meminfo`            | `<base>/memory_available`      | Uses MemAvailable / MemTotal               |
-| Uptime (days)          | `/proc/uptime`             | `<base>/uptime_days`           | 2 decimals if < 10 days                    |
-| Disk usage %           | `statvfs`                  | `<base>/disk_usage/<mount>`    | Automatically resolves device → mountpoint |
-| RAID active members    | `mdadm -D /dev/mdX`        | `<base>/raid/<md>`             | Only if listed                             |
-| Drive health           | `HDSentinel -solid`        | `<base>/health_<disk>`         | Cached, throttled (default 30 min)         |
-| NVIDIA GPU             | `nvidia-smi`               | `<base>/gpu/...`               | Temp °C, Util %, VRAM % free               |
+## What it does
 
+From a minimal YAML config, the agent detects what a host can report and publishes only sensors that have data, so a VPS never shows temperature, GPU, or RAID entities. Each host becomes one MQTT device in Home Assistant with short, human-readable entity names.
+
+Collectors available today (all auto-detected):
+
+- CPU usage and temperature (read from `/sys/class/hwmon`, no lm-sensors dependency)
+- Memory and swap usage
+- Load average (1/5/15m) and uptime
+- Filesystems per real mount: usage (df-style), used and total bytes, inode usage, filesystem type, and a read-only flag, with pseudo and network-mount hardening
+- Network per interface: rx/tx throughput and link state
+- APT upgradable count, security-update count, and reboot-required
+- systemd failed-unit count and list
+
+Planned (see `docs/superpowers/`):
+
+- Device hierarchy: disks, GPUs, RAID arrays, and docker as sub-devices, and optional host-to-host nesting so VMs appear under their physical machine
+- Storage health: SMART attributes and disk serials, mdadm, ZFS, btrfs
+- GPU (nvidia) and a non-destructive docker update scan (registry digest compare)
+- Webhook parity alongside MQTT (to drive n8n as an alternative to Home Assistant)
+- A Home Assistant button to self-update the agent, backed by a GitHub Releases pipeline
+- Reliability hardening (systemd watchdog, cached slow collectors)
+
+## How it works
+
+Collectors produce a normalized in-memory snapshot of metrics. A sink renders that snapshot to a transport. Today the MQTT sink publishes retained Home Assistant discovery, per-metric state, and an availability LWT, with auto-reconnect. Each collector splits a pure parser (fixture-tested, cross-platform) from a thin Linux reader.
 
 ## Requirements
 
-- Debian ≥ 12
-- Python ≥ 3.9  
-- Packages: `paho-mqtt`, `PyYAML`  
-- Optional tools:  
-  - `lm-sensors` (CPU temp)  
-  - `HDSentinel` CLI in `/root/HDSentinel`  
-  - `mdadm` for RAID  
-  - `nvidia-smi` for GPU metrics  
+- Debian or Ubuntu Linux (systemd)
+- The binary is static; no runtime dependencies. Optional tools are used when present (`smartctl`, `nvidia-smi`, docker, and similar are used by later collectors)
 
-Install:
+## Install
+
+Build from source (needs Go 1.22+):
+
 ```bash
-sudo apt install python3-venv lm-sensors mdadm
-cd /root/server-status
-python3 -m venv .
-./bin/pip install paho-mqtt PyYAML
+go build -o server-status ./cmd/server-status
+sudo ./scripts/install.sh
 ```
 
+The installer places the binary in `/opt/server-status/`, writes a default `/etc/server-status/config.yaml` and a chmod-600 `server-status.env` secret file, installs the systemd unit, and starts the service. Set `MQTT_PASSWORD` in `/etc/server-status/server-status.env`, then `sudo systemctl restart server-status`.
 
+Preview what a host would publish without connecting to a broker:
+
+```bash
+./server-status -c /etc/server-status/config.yaml --dump-detected
+```
 
 ## Configuration
 
-Edit `server-status.yaml`:
+Minimal config (everything else autodetects):
 
 ```yaml
-mqtt:
-  host: 192.168.1.65
-  username: mqtt
-  password: mqtt_password
-  base_topic: SERVER
-
-device:
-  name: SERVER
-  identifiers: ["SERVER"]
-
-modules:
-  cpu_usage: true
-  cpu_temp: true
-  memory: true
-  uptime: true
-  disks: true
-  raids: true
-  health: true
-  gpu: true        # enable NVIDIA GPU metrics
-
-mounts:
-  root: /
-  storage1: /dev/mapper/storage1
-  backup: /dev/mapper/backup
-
-disks: ["sda", "sdb"]
-raids: ["md0", "md1"]
-
-hdsentinel_path: /root/HDSentinel
-loop_seconds: 60
+node: myhost            # short device name; defaults to the hostname
+sinks:
+  - type: mqtt
+    host: 192.168.1.65
+    username: mqtt
+    password: ${MQTT_PASSWORD}   # interpolated from the environment
 ```
 
-Missing sections or `false` disable that metric entirely.
+## Home Assistant
 
+Each host is published as a single MQTT device via Home Assistant discovery (default prefix `homeassistant`). Entities use `has_entity_name`, so names stay short (for example a device `myhost` with a `CPU usage` entity, `sensor.myhost_cpu_usage`). Serial numbers and other identifiers are kept out of display names.
 
+## Development
 
-## Run manually
+Design specs and implementation plans live under `docs/superpowers/`. Parsers are unit-tested with fixtures and run on any OS; the collectors that read `/proc` and `/sys` are exercised on Linux.
 
 ```bash
-./bin/python3 server-status.py -c server-status.yaml
+go test ./...
+go vet ./...
 ```
 
-Run once and exit:
-```bash
-./bin/python3 server-status.py -c server-status.yaml --once
-```
+## License
 
-
-
-## Systemd Service
-
-Create `/etc/systemd/system/server-status.service`:
-
-```bash
-cd ./server-status
-cp server-status.service /etc/systemd/system/server-status.service
-```
-
-Activate:
-```bash
-systemctl daemon-reload
-systemctl enable --now server-status.service
-journalctl -u server-status.service -f
-```
-
-
-
-## MQTT / Home Assistant
-
-Each sensor is auto-discovered under the MQTT discovery prefix (default `homeassistant/`).  
-Example topics:
-
-```
-SERVER/cpu_usage
-SERVER/gpu/temp
-SERVER/health_sda
-SERVER/raid/md0
-```
-
-Availability topic: `<base>/availability`.
-
-
-
-## Notes
-
-- HDSentinel runs at most once every 30 minutes to avoid waking drives.  
-- Percentages are published as integers.  
-- GPU metrics require driver and `nvidia-smi` available in the systemd environment.  
-- Tested on Debian 12 with Python 3.11 and NVIDIA 525+.  
+See [LICENSE](LICENSE).

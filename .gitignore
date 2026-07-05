@@ -1,4 +1,7 @@
-server-status.yaml
-__pycache__/
+# Build artifacts
 /server-status
 /server-status.exe
+*.test
+
+# Local test config (real config lives in /etc/server-status/)
+server-status.yaml
