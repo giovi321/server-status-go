@@ -62,11 +62,14 @@ func Latest(ctx context.Context, apiBase, repo, assetName string) (Release, erro
 	if rel.AssetURL == "" {
 		return Release{}, fmt.Errorf("asset %q not found in latest release", assetName)
 	}
-	if sumURL != "" {
-		if s, err := fetchSha256(ctx, sumURL, assetName); err == nil {
-			rel.Sha256 = s
-		}
+	if sumURL == "" {
+		return Release{}, fmt.Errorf("no checksum asset %q.sha256 in latest release", assetName)
 	}
+	sum, err := fetchSha256(ctx, sumURL, assetName)
+	if err != nil {
+		return Release{}, fmt.Errorf("fetch checksum: %w", err)
+	}
+	rel.Sha256 = sum
 	return rel, nil
 }
 
@@ -77,7 +80,7 @@ func fetchSha256(ctx context.Context, url, assetName string) (string, error) {
 		return "", err
 	}
 	defer resp.Body.Close()
-	b, _ := io.ReadAll(resp.Body)
+	b, _ := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
 	// Accept either a bare hex line or "<hex>  <name>" lines.
 	for _, line := range strings.Split(string(b), "\n") {
 		f := strings.Fields(line)
@@ -98,6 +101,9 @@ func Apply(ctx context.Context, client *http.Client, rel Release, destPath strin
 	if client == nil {
 		client = http.DefaultClient
 	}
+	if rel.Sha256 == "" {
+		return fmt.Errorf("refusing to apply update without a checksum")
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rel.AssetURL, nil)
 	if err != nil {
 		return err
@@ -110,15 +116,13 @@ func Apply(ctx context.Context, client *http.Client, rel Release, destPath strin
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("asset download returned %d", resp.StatusCode)
 	}
-	data, err := io.ReadAll(resp.Body)
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 512*1024*1024))
 	if err != nil {
 		return err
 	}
-	if rel.Sha256 != "" {
-		sum := sha256.Sum256(data)
-		if got := hex.EncodeToString(sum[:]); got != rel.Sha256 {
-			return fmt.Errorf("checksum mismatch: got %s want %s", got, rel.Sha256)
-		}
+	sum := sha256.Sum256(data)
+	if got := hex.EncodeToString(sum[:]); got != rel.Sha256 {
+		return fmt.Errorf("checksum mismatch: got %s want %s", got, rel.Sha256)
 	}
 	tmp := destPath + ".new"
 	if err := os.WriteFile(tmp, data, 0o755); err != nil {

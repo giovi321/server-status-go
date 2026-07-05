@@ -77,3 +77,37 @@ func TestApplyRejectsBadChecksum(t *testing.T) {
 		t.Fatalf("bad download must not replace binary; got %q", got)
 	}
 }
+
+func TestLatestRequiresChecksum(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/repos/me/repo/releases/latest", func(w http.ResponseWriter, r *http.Request) {
+		base := "http://" + r.Host
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"tag_name": "v2.0.0",
+			"assets": []map[string]string{
+				{"name": "server-status-linux-amd64", "browser_download_url": base + "/dl/bin"},
+			}, // no .sha256 sibling
+		})
+	})
+	mux.HandleFunc("/dl/bin", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("x")) })
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	if _, err := Latest(context.Background(), srv.URL, "me/repo", "server-status-linux-amd64"); err == nil {
+		t.Fatal("Latest must fail closed when no .sha256 asset is published")
+	}
+}
+
+func TestApplyRefusesWithoutChecksum(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("new")) }))
+	defer srv.Close()
+	dir := t.TempDir()
+	dest := filepath.Join(dir, "server-status")
+	os.WriteFile(dest, []byte("original"), 0o755)
+	rel := Release{Version: "v2", AssetURL: srv.URL, Sha256: ""}
+	if err := Apply(context.Background(), srv.Client(), rel, dest); err == nil {
+		t.Fatal("Apply must refuse an empty checksum (fail closed)")
+	}
+	if got, _ := os.ReadFile(dest); string(got) != "original" {
+		t.Fatalf("binary must be untouched: %q", got)
+	}
+}
