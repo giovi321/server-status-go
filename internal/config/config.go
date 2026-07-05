@@ -23,11 +23,20 @@ type SinkConfig struct {
 
 // Config is the whole agent configuration.
 type Config struct {
-	Node         string       `yaml:"node"`
-	FriendlyName string       `yaml:"friendly_name"`
-	Parent       string       `yaml:"parent"`
-	Hierarchy    string       `yaml:"hierarchy"`
-	Sinks        []SinkConfig `yaml:"sinks"`
+	Node         string            `yaml:"node"`
+	FriendlyName string            `yaml:"friendly_name"`
+	Parent       string            `yaml:"parent"`
+	Hierarchy    string            `yaml:"hierarchy"`
+	Sinks        []SinkConfig      `yaml:"sinks"`
+	Disks        map[string]string `yaml:"disks"`
+}
+
+// DiskName returns the configured friendly alias for a disk serial/WWN, or fallback.
+func (c Config) DiskName(serial, fallback string) string {
+	if alias, ok := c.Disks[serial]; ok && alias != "" {
+		return alias
+	}
+	return fallback
 }
 
 var envRefs = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)

@@ -15,17 +15,18 @@ const (
 
 // Metric is one published value. Component is the sub-device id; empty means the host device.
 type Metric struct {
-	Key         string
-	Component   string
-	Instance    string
-	Name        string
-	Value       any
-	Unit        string
-	DeviceClass string
-	StateClass  string
-	Kind        Kind
-	Category    string // "primary" or "diagnostic"
-	Icon        string
+	Key           string
+	Component     string
+	ComponentName string
+	Instance      string
+	Name          string
+	Value         any
+	Unit          string
+	DeviceClass   string
+	StateClass    string
+	Kind          Kind
+	Category      string // "primary" or "diagnostic"
+	Icon          string
 }
 
 // IsHost reports whether the metric attaches to the host device rather than a sub-device.
@@ -37,6 +38,7 @@ type Device struct {
 	Name         string
 	Identifier   string
 	Parent       string
+	Hierarchy    string
 	Model        string
 	Manufacturer string
 	SWVersion    string

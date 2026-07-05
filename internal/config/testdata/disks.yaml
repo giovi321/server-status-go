@@ -1,0 +1,7 @@
+node: gc01srvr
+disks:
+  "WD-WMC4N1234567": "Parity"
+sinks:
+  - type: mqtt
+    host: 192.168.1.65
+    password: ${TEST_MQTT_PASSWORD}

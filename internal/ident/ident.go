@@ -36,6 +36,7 @@ func Identify(cfg config.Config, hostname string) model.Device {
 		Name:         name,
 		Identifier:   "server-status-" + node,
 		Parent:       Sanitize(cfg.Parent),
+		Hierarchy:    cfg.Hierarchy,
 		Manufacturer: "server-status",
 		SWVersion:    version.Version,
 	}

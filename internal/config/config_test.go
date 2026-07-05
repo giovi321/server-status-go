@@ -42,3 +42,20 @@ func TestLoadAppliesDefaults(t *testing.T) {
 		t.Fatalf("topic defaults: %q/%q", s.BaseTopic, s.DiscoveryPrefix)
 	}
 }
+
+func TestLoadDisksAliasMap(t *testing.T) {
+	t.Setenv("TEST_MQTT_PASSWORD", "x")
+	cfg, err := Load("testdata/disks.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Disks["WD-WMC4N1234567"] != "Parity" {
+		t.Fatalf("alias: %q", cfg.Disks["WD-WMC4N1234567"])
+	}
+	if got := cfg.DiskName("WD-WMC4N1234567", "sda"); got != "Parity" {
+		t.Fatalf("DiskName alias: %q", got)
+	}
+	if got := cfg.DiskName("UNKNOWN", "sdb"); got != "sdb" {
+		t.Fatalf("DiskName fallback: %q", got)
+	}
+}

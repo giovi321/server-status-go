@@ -42,3 +42,10 @@ func TestIdentifyOverrides(t *testing.T) {
 		t.Fatalf("parent %q", dev.Parent)
 	}
 }
+
+func TestIdentifySetsHierarchy(t *testing.T) {
+	dev := Identify(config.Config{Hierarchy: "flat"}, "h")
+	if dev.Hierarchy != "flat" {
+		t.Fatalf("hierarchy: %q", dev.Hierarchy)
+	}
+}
