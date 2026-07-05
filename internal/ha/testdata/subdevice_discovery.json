@@ -1,0 +1,21 @@
+{
+  "name": "Temperature",
+  "state_topic": "server-status/gc01srvr/disk-wd1234/disk_temperature",
+  "unique_id": "server-status-gc01srvr-disk-wd1234-disk_temperature",
+  "object_id": "gc01srvr_disk-wd1234_disk_temperature",
+  "has_entity_name": true,
+  "unit_of_measurement": "°C",
+  "device_class": "temperature",
+  "state_class": "measurement",
+  "availability_topic": "server-status/gc01srvr/availability",
+  "payload_available": "online",
+  "payload_not_available": "offline",
+  "qos": 0,
+  "device": {
+    "identifiers": [
+      "server-status-gc01srvr-disk-wd1234"
+    ],
+    "name": "gc01srvr Disk sda",
+    "via_device": "server-status-gc01srvr"
+  }
+}

@@ -49,16 +49,29 @@ func Discovery(dev model.Device, m model.Metric, sc config.SinkConfig) (string, 
 		PayloadAvailable:  "online",
 		PayloadNotAvail:   "offline",
 		QoS:               sc.QoS,
-		Device: deviceBlock{
+	}
+	if m.Component != "" && dev.Hierarchy != "flat" {
+		// Sub-device: its own identifier, linked to the host via via_device.
+		compName := m.ComponentName
+		if compName == "" {
+			compName = m.Component
+		}
+		p.Device = deviceBlock{
+			Identifiers: []string{dev.Identifier + "-" + m.Component},
+			Name:        dev.Name + " " + compName,
+			ViaDevice:   dev.Identifier,
+		}
+	} else {
+		p.Device = deviceBlock{
 			Identifiers:  []string{dev.Identifier},
 			Name:         dev.Name,
 			Manufacturer: dev.Manufacturer,
 			Model:        dev.Model,
 			SWVersion:    dev.SWVersion,
-		},
-	}
-	if dev.Parent != "" {
-		p.Device.ViaDevice = "server-status-" + dev.Parent
+		}
+		if dev.Parent != "" {
+			p.Device.ViaDevice = "server-status-" + dev.Parent
+		}
 	}
 	if m.Category == "diagnostic" {
 		p.EntityCategory = "diagnostic"

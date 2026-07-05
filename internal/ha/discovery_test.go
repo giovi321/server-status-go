@@ -140,3 +140,51 @@ func TestDiscoveryViaDeviceWhenParentSet(t *testing.T) {
 		t.Fatalf("via_device: %v", device["via_device"])
 	}
 }
+
+func TestDiscoverySubDeviceGrouped(t *testing.T) {
+	dev := model.Device{Node: "gc01srvr", Name: "gc01srvr", Identifier: "server-status-gc01srvr", Hierarchy: "grouped"}
+	m := model.Metric{
+		Key: "disk_temperature", Component: "disk-wd1234", ComponentName: "Disk sda",
+		Name: "Temperature", Value: 38, Unit: "°C", DeviceClass: "temperature",
+		StateClass: "measurement", Kind: model.KindSensor, Category: "primary",
+	}
+	sc := config.SinkConfig{BaseTopic: "server-status", DiscoveryPrefix: "homeassistant"}
+	topic, payload, err := Discovery(dev, m, sc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if topic != "homeassistant/sensor/gc01srvr/gc01srvr_disk-wd1234_disk_temperature/config" {
+		t.Fatalf("topic: %q", topic)
+	}
+	want, _ := os.ReadFile("testdata/subdevice_discovery.json")
+	var got, w any
+	if err := json.Unmarshal(payload, &got); err != nil {
+		t.Fatalf("payload invalid: %v", err)
+	}
+	_ = json.Unmarshal(want, &w)
+	gn, _ := json.Marshal(got)
+	wn, _ := json.Marshal(w)
+	if !bytes.Equal(gn, wn) {
+		t.Fatalf("mismatch\n got: %s\nwant: %s", gn, wn)
+	}
+}
+
+func TestDiscoverySubDeviceFlat(t *testing.T) {
+	dev := model.Device{Node: "gc01srvr", Name: "gc01srvr", Identifier: "server-status-gc01srvr", Hierarchy: "flat"}
+	m := model.Metric{Key: "disk_temperature", Component: "disk-wd1234", ComponentName: "Disk sda", Name: "Temperature", Value: 38, Unit: "°C", DeviceClass: "temperature", StateClass: "measurement", Kind: model.KindSensor}
+	sc := config.SinkConfig{BaseTopic: "server-status", DiscoveryPrefix: "homeassistant"}
+	_, payload, err := Discovery(dev, m, sc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var obj map[string]any
+	_ = json.Unmarshal(payload, &obj)
+	device := obj["device"].(map[string]any)
+	ids := device["identifiers"].([]any)
+	if ids[0] != "server-status-gc01srvr" {
+		t.Fatalf("flat must use host identifier, got %v", ids[0])
+	}
+	if device["via_device"] != nil {
+		t.Fatalf("flat host device must not have via_device here, got %v", device["via_device"])
+	}
+}
