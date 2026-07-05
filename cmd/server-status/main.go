@@ -74,7 +74,8 @@ func main() {
 	connected := sinks[:0]
 	for _, sk := range sinks {
 		if err := sk.Connect(); err != nil {
-			log.Printf("sink connect failed, dropping: %v", err)
+			log.Printf("sink %T connect failed, dropping: %v", sk, err)
+			_ = sk.Close()
 			continue
 		}
 		connected = append(connected, sk)
