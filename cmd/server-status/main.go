@@ -61,7 +61,7 @@ func main() {
 	for _, sc := range cfg.Sinks {
 		switch sc.Type {
 		case "mqtt":
-			sinks = append(sinks, sink.NewMQTT(sc, dev))
+			sinks = append(sinks, sink.NewMQTT(sc, dev, nil))
 		case "webhook":
 			sinks = append(sinks, sink.NewWebhook(sc))
 		default:

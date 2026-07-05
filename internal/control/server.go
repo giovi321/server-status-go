@@ -1,14 +1,16 @@
-// Package control serves a read-only HTTP surface (health + latest snapshot).
-// Command endpoints and MQTT command topics are added in a later plan.
+// Package control serves an HTTP surface (health, latest snapshot, and
+// command dispatch) for the agent.
 package control
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
 	"sync"
 
+	"github.com/giovi321/server-status/internal/command"
 	"github.com/giovi321/server-status/internal/config"
 	"github.com/giovi321/server-status/internal/model"
 )
@@ -19,6 +21,10 @@ type Server struct {
 	version string
 	mu      sync.RWMutex
 	snap    *model.Snapshot
+	disp    interface {
+		Run(ctx context.Context, name string) command.Result
+		Names() []string
+	}
 }
 
 // NewServer builds an unstarted control server.
@@ -32,6 +38,9 @@ func (s *Server) Update(snap model.Snapshot) {
 	s.snap = &snap
 	s.mu.Unlock()
 }
+
+// SetDispatcher wires the command dispatcher for POST /command/{name}.
+func (s *Server) SetDispatcher(d *command.Dispatcher) { s.disp = d }
 
 func (s *Server) authOK(r *http.Request) bool {
 	if s.cfg.Token == "" {
@@ -61,6 +70,22 @@ func (s *Server) Handler() http.Handler {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(snap)
+	})
+	mux.HandleFunc("POST /command/{name}", func(w http.ResponseWriter, r *http.Request) {
+		if !s.authOK(r) {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		if s.disp == nil {
+			http.Error(w, "commands disabled", http.StatusServiceUnavailable)
+			return
+		}
+		res := s.disp.Run(r.Context(), r.PathValue("name"))
+		w.Header().Set("Content-Type", "application/json")
+		if !res.OK {
+			w.WriteHeader(http.StatusBadRequest)
+		}
+		_ = json.NewEncoder(w).Encode(res)
 	})
 	return mux
 }

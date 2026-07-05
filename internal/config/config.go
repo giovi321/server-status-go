@@ -34,6 +34,13 @@ type Config struct {
 	Disks           map[string]string `yaml:"disks"`
 	SmartAttributes string            `yaml:"smart_attributes"`
 	Control         ControlConfig     `yaml:"control"`
+	Update          UpdateConfig      `yaml:"update"`
+}
+
+// UpdateConfig configures self-update.
+type UpdateConfig struct {
+	Repo                 string `yaml:"repo"`
+	CheckIntervalSeconds int    `yaml:"check_interval_seconds"`
 }
 
 // ControlConfig configures the inbound control surface.
@@ -100,5 +107,11 @@ func (c *Config) applyDefaults() {
 		if s.DiscoveryPrefix == "" {
 			s.DiscoveryPrefix = "homeassistant"
 		}
+	}
+	if c.Update.Repo == "" {
+		c.Update.Repo = "giovi321/server-status-go"
+	}
+	if c.Update.CheckIntervalSeconds == 0 {
+		c.Update.CheckIntervalSeconds = 21600
 	}
 }
