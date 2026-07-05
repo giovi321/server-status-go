@@ -23,6 +23,13 @@ type MQTT struct {
 	discovered map[string]bool
 }
 
+// discoveryDedupKey identifies a distinct discovered entity. It MUST include
+// Instance: multi-instance metrics (filesystems, network, temperatures) share a
+// Key, and omitting Instance would publish discovery for only the first instance.
+func discoveryDedupKey(m model.Metric) string {
+	return m.Key + "|" + m.Component + "|" + m.Instance
+}
+
 // NewMQTT builds an unconnected MQTT sink.
 func NewMQTT(sc config.SinkConfig, dev model.Device) *MQTT {
 	return &MQTT{
@@ -69,7 +76,7 @@ func (m *MQTT) Publish(snap model.Snapshot) error {
 		return fmt.Errorf("mqtt sink not connected; skipping publish for %s", snap.Device.Node)
 	}
 	for _, metric := range snap.Metrics {
-		key := metric.Key + "|" + metric.Component + "|" + metric.Instance
+		key := discoveryDedupKey(metric)
 		m.mu.Lock()
 		already := m.discovered[key]
 		m.mu.Unlock()

@@ -13,7 +13,9 @@ import (
 
 // TempReading is one temperature sensor reading in milli-degrees Celsius.
 type TempReading struct {
-	Label  string
+	Chip   string // hwmon dir, e.g. "hwmon0" — makes the instance unique across identically-named chips
+	Sensor string // e.g. "temp1"
+	Label  string // human display label
 	MilliC int
 }
 
@@ -62,7 +64,7 @@ func hwmonReadings(root string) []TempReading {
 				}
 				label = base + " " + idx
 			}
-			out = append(out, TempReading{Label: label, MilliC: v})
+			out = append(out, TempReading{Chip: chip.Name(), Sensor: idx, Label: label, MilliC: v})
 		}
 	}
 	return out
@@ -72,7 +74,7 @@ func tempMetrics(readings []TempReading) []model.Metric {
 	var out []model.Metric
 	for _, r := range readings {
 		out = append(out, model.Metric{
-			Key: "temperature", Instance: r.Label, Name: r.Label + " temperature",
+			Key: "temperature", Instance: r.Chip + "-" + r.Sensor, Name: r.Label + " temperature",
 			Value: int(float64(r.MilliC)/1000.0 + 0.5), Unit: "°C", DeviceClass: "temperature",
 			StateClass: "measurement", Kind: model.KindSensor, Category: "primary",
 		})

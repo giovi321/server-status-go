@@ -37,3 +37,18 @@ func TestHwmonReadings(t *testing.T) {
 		t.Fatalf("unlabeled reading fallback: %+v", got)
 	}
 }
+
+func TestTempMetricsDistinctInstancePerChip(t *testing.T) {
+	// two chips with the SAME label (e.g. two NVMe "Composite", or two drivetemp) must not collide
+	rs := []TempReading{
+		{Chip: "hwmon5", Sensor: "temp1", Label: "drivetemp temp1", MilliC: 40000},
+		{Chip: "hwmon6", Sensor: "temp1", Label: "drivetemp temp1", MilliC: 42000},
+	}
+	ms := tempMetrics(rs)
+	if len(ms) != 2 {
+		t.Fatalf("expected 2 metrics, got %d", len(ms))
+	}
+	if ms[0].Instance == ms[1].Instance {
+		t.Fatalf("identically-labeled sensors on different chips must have distinct Instance, both = %q", ms[0].Instance)
+	}
+}
