@@ -1,0 +1,16 @@
+node: gc03srvr
+sinks:
+  - type: mqtt
+    host: 192.168.1.65
+    username: mqtt
+    password: ${TEST_MQTT_PASSWORD}
+rsnapshot:
+  stuck_after: 6h
+  margin: 4h
+  configs:
+    - path: /etc/rsnapshot.conf
+    - path: /etc/rsnapshot-gc01srvr.conf
+      name: gc01srvr
+      max_age:
+        daily: 26h
+        weekly: 200h

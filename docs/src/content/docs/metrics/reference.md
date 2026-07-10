@@ -3,7 +3,7 @@ title: "Metrics reference"
 description: "Every metric key, its unit, entity type, and category"
 ---
 
-This is the complete catalog: 16 collectors, 68 distinct metric keys. Column meanings:
+This is the complete catalog: 17 collectors, 86 distinct metric keys. Column meanings:
 
 - **kind** is the entity type. `sensor` and `binary_sensor` map to those Home Assistant domains. `text` is published as a plain `sensor` (there is no separate text domain in the discovery)
 - **category** `primary` entities show as normal controls; `diagnostic` entities are grouped under the device's diagnostic section in Home Assistant
@@ -134,6 +134,40 @@ Each physical disk is a sub-device. A metric appears only when the value is pres
 | `docker_unhealthy` | Unhealthy | | sensor | primary | |
 | `docker_updates_available` | Updates available | | sensor | primary | distinct images with a newer registry digest |
 | `docker_containers` | Containers | | text | diagnostic | JSON inventory of every container |
+
+## Rsnapshot (per config sub-device)
+
+Each monitored rsnapshot config file is a sub-device (`main` for `/etc/rsnapshot.conf`, otherwise the filename minus the `rsnapshot-` prefix and `.conf` suffix). All values come from file reads; the collector never runs rsnapshot.
+
+`rsnapshot_state` is an enum: `error`, `stuck`, `stale`, `running`, `pending`, `warning`, `unknown`, `ok`. `pending` means the first snapshot has not appeared yet and nothing else is wrong. `rsnapshot_last_result` is `success`, `warnings`, `errors`, `running`, `died`, or `unknown`.
+
+`rsnapshot_interval_age` is multi-instance: one sensor per retain interval, with the interval name (`hoursago`, `daily`, ...) as the instance.
+
+| key | name | unit | kind | category | notes |
+|-----|------|------|------|----------|-------|
+| `rsnapshot_problem` | Problem | | binary_sensor | primary | `problem` when state is `error`, `stale`, or `stuck` |
+| `rsnapshot_state` | State | | text | primary | see the enum above |
+| `rsnapshot_last_result` | Last result | | text | primary | outcome of the last run seen in the log |
+| `rsnapshot_last_success` | Last success | | sensor | primary | `timestamp` device class, RFC3339; omitted until a first success exists |
+| `rsnapshot_stale` | Stale | | binary_sensor | primary | `problem`; only emitted when a staleness bound is known (`max_age` or cron-derived) |
+| `rsnapshot_stuck` | Stuck | | binary_sensor | primary | `problem` when a live run holds the lock longer than `stuck_after` |
+| `rsnapshot_interval_age` | `<interval> age` | h | sensor | primary | one per retain interval |
+| `rsnapshot_running` | Running | | binary_sensor | diagnostic | `running` device class; a live rsnapshot process holds the lock |
+| `rsnapshot_stale_lock` | Stale lock | | binary_sensor | diagnostic | `problem`; lockfile exists but the pid is dead or the content unparseable |
+| `rsnapshot_root_missing` | Root missing | | binary_sensor | diagnostic | `problem`; snapshot root is not a readable directory |
+| `rsnapshot_root_readonly` | Root read-only | | binary_sensor | diagnostic | `problem`; snapshot root filesystem is mounted read-only |
+| `rsnapshot_config_error` | Config error | | binary_sensor | diagnostic | `problem`; conf unreadable, no `snapshot_root`, or no retain intervals |
+| `rsnapshot_cron_jobs` | Cron jobs | | sensor | diagnostic | cron entries matched to this config across all intervals |
+| `rsnapshot_cron_list` | Cron list | | text | diagnostic | matched `<interval> <spec>` pairs |
+| `rsnapshot_intervals` | Intervals | | text | diagnostic | like `hoursago:6 daysago:7 weeksago:4 monthsago:4` |
+| `rsnapshot_stray_items` | Stray items | | sensor | diagnostic | leftover `_delete.*` and `*.sync` entries in the snapshot root |
+| `rsnapshot_details` | Details | | text | diagnostic | like `mount:ok rw:ok conf:ok cron:4 lock:idle stray:0` |
+
+One host-level metric counts the monitored configs:
+
+| key | name | unit | kind | category | notes |
+|-----|------|------|------|----------|-------|
+| `rsnapshot_configs` | Rsnapshot configs | | sensor | diagnostic | number of monitored config files |
 
 ## Agent
 

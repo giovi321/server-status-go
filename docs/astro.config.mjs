@@ -66,6 +66,7 @@ export default defineConfig({
           items: [
             { label: 'Collectors', link: '/metrics/collectors/' },
             { label: 'Metrics reference', link: '/metrics/reference/' },
+            { label: 'Rsnapshot backups', link: '/metrics/rsnapshot/' },
           ],
         },
         {

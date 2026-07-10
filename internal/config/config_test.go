@@ -71,6 +71,45 @@ func TestLoadDisksAliasMap(t *testing.T) {
 	}
 }
 
+func TestLoadRsnapshot(t *testing.T) {
+	t.Setenv("TEST_MQTT_PASSWORD", "x")
+	cfg, err := Load("testdata/rsnapshot.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := cfg.Rsnapshot
+	if r.StuckAfter != "6h" || r.Margin != "4h" {
+		t.Fatalf("stuck_after/margin: %q/%q", r.StuckAfter, r.Margin)
+	}
+	if len(r.Configs) != 2 {
+		t.Fatalf("configs: %d", len(r.Configs))
+	}
+	if r.Configs[0].Path != "/etc/rsnapshot.conf" || r.Configs[0].Name != "" {
+		t.Fatalf("configs[0]: %+v", r.Configs[0])
+	}
+	e := r.Configs[1]
+	if e.Path != "/etc/rsnapshot-gc01srvr.conf" || e.Name != "gc01srvr" {
+		t.Fatalf("configs[1]: %+v", e)
+	}
+	if e.MaxAge["daily"] != "26h" || e.MaxAge["weekly"] != "200h" {
+		t.Fatalf("max_age: %+v", e.MaxAge)
+	}
+}
+
+func TestRsnapshotDefaults(t *testing.T) {
+	t.Setenv("TEST_MQTT_PASSWORD", "x")
+	cfg, err := Load("testdata/minimal.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Rsnapshot.StuckAfter != "12h" || cfg.Rsnapshot.Margin != "8h" {
+		t.Fatalf("rsnapshot defaults: %q/%q", cfg.Rsnapshot.StuckAfter, cfg.Rsnapshot.Margin)
+	}
+	if len(cfg.Rsnapshot.Configs) != 0 {
+		t.Fatalf("configs should default empty: %+v", cfg.Rsnapshot.Configs)
+	}
+}
+
 func TestLoadWebhookAndControl(t *testing.T) {
 	t.Setenv("TEST_MQTT_PASSWORD", "s3cret")
 	cfg, err := Load("testdata/webhook.yaml")

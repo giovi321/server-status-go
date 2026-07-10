@@ -35,6 +35,23 @@ type Config struct {
 	SmartAttributes string            `yaml:"smart_attributes"`
 	Control         ControlConfig     `yaml:"control"`
 	Update          UpdateConfig      `yaml:"update"`
+	Rsnapshot       RsnapshotConfig   `yaml:"rsnapshot"`
+}
+
+// RsnapshotEntry selects one rsnapshot config file to monitor. Name overrides
+// the derived sub-device name; MaxAge overrides per-interval staleness bounds.
+type RsnapshotEntry struct {
+	Path   string            `yaml:"path"`
+	Name   string            `yaml:"name"`
+	MaxAge map[string]string `yaml:"max_age"`
+}
+
+// RsnapshotConfig configures the rsnapshot collector. An empty Configs list
+// means auto-discovery under /etc.
+type RsnapshotConfig struct {
+	Configs    []RsnapshotEntry `yaml:"configs"`
+	StuckAfter string           `yaml:"stuck_after"`
+	Margin     string           `yaml:"margin"`
 }
 
 // UpdateConfig configures self-update.
@@ -113,5 +130,11 @@ func (c *Config) applyDefaults() {
 	}
 	if c.Update.CheckIntervalSeconds == 0 {
 		c.Update.CheckIntervalSeconds = 21600
+	}
+	if c.Rsnapshot.StuckAfter == "" {
+		c.Rsnapshot.StuckAfter = "12h"
+	}
+	if c.Rsnapshot.Margin == "" {
+		c.Rsnapshot.Margin = "8h"
 	}
 }

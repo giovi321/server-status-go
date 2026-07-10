@@ -18,6 +18,7 @@ The config is a single YAML file passed with `-c`. Any `${VAR}` is expanded from
 | `smart_attributes` | string | `curated` | `curated` publishes a hand-picked set of SMART attributes; `full` additionally emits a `disk_smart_raw` diagnostic containing the whole parsed smartctl output as JSON |
 | `control` | object | (none) | The inbound control surface (see below) |
 | `update` | object | defaults below | Self-update source (see below) |
+| `rsnapshot` | object | defaults below | Rsnapshot backup monitoring (see below) |
 
 ## Sinks
 
@@ -71,6 +72,30 @@ update:
 | `update.repo` | string | `giovi321/server-status-go` | GitHub `owner/name` the self-update pulls its latest release from |
 | `update.check_interval_seconds` | int | `21600` | Configured interval for update checks (6 hours) |
 
+## Rsnapshot
+
+```yaml
+rsnapshot:
+  stuck_after: 12h
+  margin: 8h
+  configs:
+    - path: /etc/rsnapshot-gc01srvr.conf
+      name: gc01srvr
+      max_age:
+        daily: 26h
+```
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `rsnapshot.configs` | list | (none) | Config files to monitor. When empty, `/etc/rsnapshot.conf` and `/etc/rsnapshot-*.conf` are auto-discovered (packaging and editor leftovers like `.dpkg-dist` or `.bak` are skipped) |
+| `rsnapshot.configs[].path` | string | (required) | Path of the rsnapshot config file |
+| `rsnapshot.configs[].name` | string | derived | Sub-device name. Defaults to `main` for `/etc/rsnapshot.conf`, otherwise the filename minus the `rsnapshot-` prefix and `.conf` suffix |
+| `rsnapshot.configs[].max_age` | map | (none) | Per-interval staleness bound, keyed by retain interval name. Overrides the cron-derived bound for that interval |
+| `rsnapshot.stuck_after` | string | `12h` | A run whose lock has been held longer than this counts as stuck |
+| `rsnapshot.margin` | string | `8h` | Slack added to the cron-derived staleness bound, covering run duration and serialization delays |
+
+Durations use Go syntax (`12h`, `90m`). An empty, invalid, or non-positive `stuck_after` or `margin` falls back to its default; an invalid `max_age` value is dropped, so that interval keeps the cron-derived bound.
+
 ## Full example
 
 ```yaml
@@ -104,6 +129,10 @@ control:
 update:
   repo: giovi321/server-status-go
   check_interval_seconds: 21600
+
+rsnapshot:
+  stuck_after: 12h
+  margin: 8h
 
 disks:
   "WD-WCC4N7XXXXXX": data-1
