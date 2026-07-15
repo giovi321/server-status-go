@@ -60,6 +60,27 @@ func gc01EvalInput() rsnapEvalInput {
 	}
 }
 
+// gc01Timers mirrors the migrated GC01SRVR shape: the same four intervals driven
+// by systemd timers instead of cron.
+func gc01Timers() map[string][]timerUnit {
+	mk := func(interval, cal string) []timerUnit {
+		return []timerUnit{{
+			Name:      "rsnapshot-" + interval + ".timer",
+			Calendars: []string{cal},
+			Activates: "rsnapshot@" + interval + ".service",
+			ConfPath:  "/etc/rsnapshot.conf",
+			Interval:  interval,
+			Enabled:   true,
+		}}
+	}
+	return map[string][]timerUnit{
+		"hoursago":  mk("hoursago", "*-*-* 00/6:00:00"),
+		"daysago":   mk("daysago", "*-*-* 05:20:00"),
+		"weeksago":  mk("weeksago", "Mon *-*-* 05:10:00"),
+		"monthsago": mk("monthsago", "*-*-01 05:00:00"),
+	}
+}
+
 func TestEvaluateRsnapshot(t *testing.T) {
 	aliveLock := func(age time.Duration) rsnapLockState {
 		return rsnapLockState{Exists: true, Pid: 4242, PidAlive: true, CmdlineMatch: true, Mtime: rsnapNow.Add(-age)}
@@ -101,11 +122,72 @@ func TestEvaluateRsnapshot(t *testing.T) {
 				if st.CronList != "hoursago 0 */6 * * *; daysago 20 5 * * *; weeksago 10 5 * * 1; monthsago 0 5 1 * *" {
 					t.Fatalf("CronList: %q", st.CronList)
 				}
-				if st.Details != "mount:ok rw:ok conf:ok cron:4 lock:idle stray:0" {
+				if st.Details != "mount:ok rw:ok conf:ok cron:4 timer:n/a lock:idle stray:0" {
 					t.Fatalf("Details: %q", st.Details)
 				}
 				if len(st.Reasons) != 0 {
 					t.Fatalf("Reasons: %v", st.Reasons)
+				}
+			},
+		},
+		{
+			name: "all good via timers (migrated off cron)",
+			mut: func(in *rsnapEvalInput) {
+				in.CronMatches = nil
+				in.TimerReadable = true
+				in.TimerMatches = gc01Timers()
+			},
+			state: "ok",
+			check: func(t *testing.T, st rsnapStatus) {
+				if !st.StaleKnown {
+					t.Fatal("StaleKnown must be true with a timer-derived bound")
+				}
+				if st.Stale || st.Problem {
+					t.Fatalf("fresh timer-scheduled backup must be ok: %+v", st)
+				}
+				if st.TimerJobs != 4 || st.CronJobs != 0 {
+					t.Fatalf("jobs: timer=%d cron=%d", st.TimerJobs, st.CronJobs)
+				}
+				if !strings.Contains(st.Details, "timer:4") {
+					t.Fatalf("Details: %q", st.Details)
+				}
+			},
+		},
+		{
+			name: "stale lowest via timer bound",
+			mut: func(in *rsnapEvalInput) {
+				in.CronMatches = nil
+				in.TimerReadable = true
+				in.TimerMatches = gc01Timers()
+				// bound = 6h gap + 8h margin = 14h; make hoursago.0 older than that
+				old := rsnapNow.Add(-20 * time.Hour)
+				in.IntervalDirs["hoursago"] = rsnapDirTimes{Mtime: old, Ctime: old}
+				in.LogMtime = old
+			},
+			state: "stale",
+			check: func(t *testing.T, st rsnapStatus) {
+				if !st.Stale {
+					t.Fatalf("expected stale via timer bound: %+v", st)
+				}
+			},
+		},
+		{
+			name: "partial timer schedule is an error",
+			mut: func(in *rsnapEvalInput) {
+				in.CronMatches = nil
+				in.TimerReadable = true
+				in.TimerMatches = map[string][]timerUnit{"hoursago": gc01Timers()["hoursago"]}
+			},
+			state: "error",
+			check: func(t *testing.T, st rsnapStatus) {
+				found := false
+				for _, r := range st.Reasons {
+					if strings.Contains(r, "no schedule for") {
+						found = true
+					}
+				}
+				if !found {
+					t.Fatalf("expected 'no schedule for' reason: %v", st.Reasons)
 				}
 			},
 		},

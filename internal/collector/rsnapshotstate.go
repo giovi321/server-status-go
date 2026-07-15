@@ -30,21 +30,23 @@ type rsnapDirTimes struct {
 
 // rsnapEvalInput is everything evaluateRsnapshot needs, gathered by the collector.
 type rsnapEvalInput struct {
-	Conf         rsnapConf
-	ConfReadable bool
-	Log          rsnapLogState
-	LogReadable  bool
-	LogMtime     time.Time
-	Lock         rsnapLockState
-	IntervalDirs map[string]rsnapDirTimes
-	CronMatches  map[string][]cronEntry
-	CronReadable bool
-	RootExists   bool
-	RootReadOnly bool
-	StrayCount   int
-	MaxAge       map[string]time.Duration
-	Margin       time.Duration
-	StuckAfter   time.Duration
+	Conf          rsnapConf
+	ConfReadable  bool
+	Log           rsnapLogState
+	LogReadable   bool
+	LogMtime      time.Time
+	Lock          rsnapLockState
+	IntervalDirs  map[string]rsnapDirTimes
+	CronMatches   map[string][]cronEntry
+	CronReadable  bool
+	TimerMatches  map[string][]timerUnit
+	TimerReadable bool
+	RootExists    bool
+	RootReadOnly  bool
+	StrayCount    int
+	MaxAge        map[string]time.Duration
+	Margin        time.Duration
+	StuckAfter    time.Duration
 }
 
 // rsnapStatus is the evaluated status of one rsnapshot config.
@@ -65,6 +67,8 @@ type rsnapStatus struct {
 	IntervalAges  map[string]float64
 	CronJobs      int
 	CronList      string
+	TimerJobs     int
+	TimerList     string
 	IntervalsText string
 	Details       string
 }
@@ -158,12 +162,17 @@ func evaluateRsnapshot(in rsnapEvalInput, now time.Time) rsnapStatus {
 		st.LastSuccess = lowestMtime
 	}
 
-	// Staleness bound for the lowest interval: MaxAge override beats cron-derived.
+	// Staleness bound for the lowest interval. Precedence: an explicit MaxAge
+	// override, then the systemd timer schedule (the current mechanism), then the
+	// crontab (fallback for hosts not yet migrated). Cron and timers agree during
+	// a cutover, so preferring the timer is safe.
 	var bound time.Duration
 	boundKnown := false
 	if lowest != "" {
 		if d, ok := in.MaxAge[lowest]; ok && d > 0 {
 			bound, boundKnown = d, true
+		} else if b, ok := rsnapshotTimerBound(in.TimerMatches[lowest]); ok {
+			bound, boundKnown = b+in.Margin, true
 		} else if b, ok := rsnapshotCronBound(in.CronMatches[lowest]); ok {
 			bound, boundKnown = b+in.Margin, true
 		}
@@ -186,24 +195,31 @@ func evaluateRsnapshot(in rsnapEvalInput, now time.Time) rsnapStatus {
 		deadman = !freshest.IsZero() && now.Sub(freshest) > bound
 	}
 
-	// Cron summary and partial-schedule check: some intervals scheduled while
-	// others are not is a problem; zero matches everywhere is not (the schedule
-	// may live elsewhere).
-	var cronList, missing []string
+	// Schedule summary and partial-schedule check across BOTH sources (systemd
+	// timers and cron): an interval is covered if either schedules it. Some
+	// intervals scheduled while others are not is a problem; zero matches
+	// everywhere is not (the schedule may live elsewhere).
+	var cronList, timerList, missing []string
 	matched := 0
 	for _, iv := range in.Conf.Intervals {
-		es := in.CronMatches[iv.Name]
-		if len(es) > 0 {
+		ces := in.CronMatches[iv.Name]
+		tes := in.TimerMatches[iv.Name]
+		if len(ces) > 0 || len(tes) > 0 {
 			matched++
 		} else {
 			missing = append(missing, iv.Name)
 		}
-		st.CronJobs += len(es)
-		for _, e := range es {
+		st.CronJobs += len(ces)
+		for _, e := range ces {
 			cronList = append(cronList, iv.Name+" "+e.Spec)
 		}
+		st.TimerJobs += len(tes)
+		for _, u := range tes {
+			timerList = append(timerList, iv.Name+" "+strings.Join(u.Calendars, ","))
+		}
 	}
-	partialCron := in.CronReadable && matched > 0 && len(missing) > 0
+	scheduleReadable := in.CronReadable || in.TimerReadable
+	partialSchedule := scheduleReadable && matched > 0 && len(missing) > 0
 
 	var reasons []string
 	if !in.ConfReadable {
@@ -233,8 +249,8 @@ func evaluateRsnapshot(in rsnapEvalInput, now time.Time) rsnapStatus {
 	if st.LastResult == "died" {
 		reasons = append(reasons, "last run died")
 	}
-	if partialCron {
-		reasons = append(reasons, "no cron entry for "+strings.Join(missing, ","))
+	if partialSchedule {
+		reasons = append(reasons, "no schedule for "+strings.Join(missing, ","))
 	}
 	if st.Stuck {
 		reasons = append(reasons, fmt.Sprintf("lock held %.1fh", now.Sub(in.Lock.Mtime).Hours()))
@@ -256,7 +272,7 @@ func evaluateRsnapshot(in rsnapEvalInput, now time.Time) rsnapStatus {
 	// State precedence: first match wins.
 	switch {
 	case st.ConfigError || st.RootMissing || st.RootReadOnly || st.StaleLock ||
-		st.LastResult == "errors" || st.LastResult == "died" || partialCron:
+		st.LastResult == "errors" || st.LastResult == "died" || partialSchedule:
 		st.State = "error"
 	case st.Stuck:
 		st.State = "stuck"
@@ -264,7 +280,7 @@ func evaluateRsnapshot(in rsnapEvalInput, now time.Time) rsnapStatus {
 		st.State = "stale"
 	case alive:
 		st.State = "running"
-	case !lowestSeen && in.LogReadable && in.CronReadable:
+	case !lowestSeen && in.LogReadable && scheduleReadable:
 		st.State = "pending"
 	case (in.Log.LastResult == "warnings" && !in.Log.BenignOnly) || in.StrayCount > 0:
 		st.State = "warning"
@@ -281,6 +297,7 @@ func evaluateRsnapshot(in rsnapEvalInput, now time.Time) rsnapStatus {
 	}
 	st.IntervalsText = rsnapClip(strings.Join(itv, " "))
 	st.CronList = rsnapClip(strings.Join(cronList, "; "))
+	st.TimerList = rsnapClip(strings.Join(timerList, "; "))
 
 	mount, rw, conf, lock := "ok", "ok", "ok", "idle"
 	if st.RootMissing {
@@ -304,7 +321,11 @@ func evaluateRsnapshot(in rsnapEvalInput, now time.Time) rsnapStatus {
 	if !in.CronReadable {
 		cron = "n/a"
 	}
-	st.Details = rsnapClip(fmt.Sprintf("mount:%s rw:%s conf:%s cron:%s lock:%s stray:%d",
-		mount, rw, conf, cron, lock, in.StrayCount))
+	timer := strconv.Itoa(st.TimerJobs)
+	if !in.TimerReadable {
+		timer = "n/a"
+	}
+	st.Details = rsnapClip(fmt.Sprintf("mount:%s rw:%s conf:%s cron:%s timer:%s lock:%s stray:%d",
+		mount, rw, conf, cron, timer, lock, in.StrayCount))
 	return st
 }

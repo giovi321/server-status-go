@@ -139,6 +139,8 @@ Each physical disk is a sub-device. A metric appears only when the value is pres
 
 Each monitored rsnapshot config file is a sub-device (`main` for `/etc/rsnapshot.conf`, otherwise the filename minus the `rsnapshot-` prefix and `.conf` suffix). All values come from file reads; the collector never runs rsnapshot.
 
+The schedule that drives each interval, and the staleness bound derived from it, are read from the systemd timers that start `rsnapshot@<interval>.service`, falling back to the crontab on hosts still triggered that way. On a timer-driven host `rsnapshot_cron_jobs` is `0` and `rsnapshot_timer_jobs` carries the coverage; on a cron host it is the reverse.
+
 `rsnapshot_state` is an enum: `error`, `stuck`, `stale`, `running`, `pending`, `warning`, `unknown`, `ok`. `pending` means the first snapshot has not appeared yet and nothing else is wrong. `rsnapshot_last_result` is `success`, `warnings`, `errors`, `running`, `died`, or `unknown`.
 
 `rsnapshot_interval_age` is multi-instance: one sensor per retain interval, with the interval name (`hoursago`, `daily`, ...) as the instance.
@@ -149,7 +151,7 @@ Each monitored rsnapshot config file is a sub-device (`main` for `/etc/rsnapshot
 | `rsnapshot_state` | State | | text | primary | see the enum above |
 | `rsnapshot_last_result` | Last result | | text | primary | outcome of the last run seen in the log |
 | `rsnapshot_last_success` | Last success | | sensor | primary | `timestamp` device class, RFC3339; omitted until a first success exists |
-| `rsnapshot_stale` | Stale | | binary_sensor | primary | `problem`; only emitted when a staleness bound is known (`max_age` or cron-derived) |
+| `rsnapshot_stale` | Stale | | binary_sensor | primary | `problem`; only emitted when a staleness bound is known (`max_age`, else derived from the systemd timer or cron schedule) |
 | `rsnapshot_stuck` | Stuck | | binary_sensor | primary | `problem` when a live run holds the lock longer than `stuck_after` |
 | `rsnapshot_interval_age` | `<interval> age` | h | sensor | primary | one per retain interval |
 | `rsnapshot_running` | Running | | binary_sensor | diagnostic | `running` device class; a live rsnapshot process holds the lock |
@@ -157,11 +159,13 @@ Each monitored rsnapshot config file is a sub-device (`main` for `/etc/rsnapshot
 | `rsnapshot_root_missing` | Root missing | | binary_sensor | diagnostic | `problem`; snapshot root is not a readable directory |
 | `rsnapshot_root_readonly` | Root read-only | | binary_sensor | diagnostic | `problem`; snapshot root filesystem is mounted read-only |
 | `rsnapshot_config_error` | Config error | | binary_sensor | diagnostic | `problem`; conf unreadable, no `snapshot_root`, or no retain intervals |
-| `rsnapshot_cron_jobs` | Cron jobs | | sensor | diagnostic | cron entries matched to this config across all intervals |
+| `rsnapshot_cron_jobs` | Cron jobs | | sensor | diagnostic | cron entries matched to this config across all intervals (`0` on a timer-driven host) |
 | `rsnapshot_cron_list` | Cron list | | text | diagnostic | matched `<interval> <spec>` pairs |
+| `rsnapshot_timer_jobs` | Timer jobs | | sensor | diagnostic | enabled systemd timers matched to this config across all intervals |
+| `rsnapshot_timer_list` | Timer list | | text | diagnostic | matched `<interval> <OnCalendar>` pairs |
 | `rsnapshot_intervals` | Intervals | | text | diagnostic | like `hoursago:6 daysago:7 weeksago:4 monthsago:4` |
 | `rsnapshot_stray_items` | Stray items | | sensor | diagnostic | leftover `_delete.*` and `*.sync` entries in the snapshot root |
-| `rsnapshot_details` | Details | | text | diagnostic | like `mount:ok rw:ok conf:ok cron:4 lock:idle stray:0` |
+| `rsnapshot_details` | Details | | text | diagnostic | like `mount:ok rw:ok conf:ok cron:0 timer:4 lock:idle stray:0` |
 
 One host-level metric counts the monitored configs:
 

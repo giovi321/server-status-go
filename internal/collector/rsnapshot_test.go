@@ -168,7 +168,7 @@ func TestGatherRsnapshotOmittedLogfileLockfile(t *testing.T) {
 		t.Fatal(err)
 	}
 	r := NewRsnapshot(config.Config{})
-	in := r.gatherRsnapshot(rsnapTarget{Path: confPath, Name: "other"}, nil, nil, false)
+	in := r.gatherRsnapshot(rsnapTarget{Path: confPath, Name: "other"}, nil, nil, false, nil, false)
 	if in.Conf.Logfile != "" || in.Conf.Lockfile != "" {
 		t.Fatalf("invented defaults: logfile=%q lockfile=%q", in.Conf.Logfile, in.Conf.Lockfile)
 	}

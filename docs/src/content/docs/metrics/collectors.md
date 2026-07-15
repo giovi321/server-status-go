@@ -30,7 +30,7 @@ A collector is a pure reader of one data source (`/proc`, `/sys`, or a standard 
 | `gpu` | `nvidia-smi` present | Per-GPU temperature, utilization, memory, power, fan | one per GPU |
 | `zfs` | `zpool` present | Per-pool health, capacity, fragmentation | one per pool |
 | `docker` | `docker` CLI present | Container counts, unhealthy, updates available, inventory | one `Docker` sub-device |
-| `rsnapshot` | an `/etc/rsnapshot*.conf` exists (or a path listed under `rsnapshot.configs`) | Per-config backup status: problem, state, last result, staleness, interval ages, cron coverage | one per config file |
+| `rsnapshot` | an `/etc/rsnapshot*.conf` exists (or a path listed under `rsnapshot.configs`) | Per-config backup status: problem, state, last result, staleness, interval ages, and schedule coverage from systemd timers or cron | one per config file |
 | `agent` | always | Last-seen heartbeat and agent version | host |
 
 See the [Metrics reference](../reference/) for every key, unit, and entity type.
@@ -40,7 +40,7 @@ See the [Metrics reference](../reference/) for every key, unit, and entity type.
 - **`smart`** caches results for 30 minutes so drives are not woken every cycle. Disk aliases come from the `disks:` config; without an alias a disk uses a fallback name. `smart_attributes: full` adds a raw diagnostic
 - **`docker`** counts `docker ps -a` every cycle, but the registry update scan (which images have a newer digest) is cached for 6 hours. It never pulls images; it compares digests using `skopeo` if present, otherwise `docker manifest inspect`. A locally-built image with no registry digest counts as "no update"
 - **`zfs` and `docker` availability track the tool, not the workload**. A host with `zpool` installed but no pools, or the `docker` CLI installed but the daemon stopped, reports the collector as available and simply publishes no items. This is by design; it avoids flapping when a pool or the daemon comes and goes
-- **`rsnapshot`** never executes rsnapshot: everything comes from file reads (the config file, the log tail, the lockfile, the snapshot directories, and cron files). Auto-discovery picks up `/etc/rsnapshot.conf` and `/etc/rsnapshot-*.conf`, skipping packaging and editor leftovers (`.dpkg-dist`, `.dpkg-old`, `~`, `.bak`); an explicit `rsnapshot.configs` list in the config replaces discovery
+- **`rsnapshot`** never executes rsnapshot: everything comes from file reads (the config file, the log tail, the lockfile, the snapshot directories, the systemd `.timer`/`.service` units, and the crontabs). The schedule for each interval, and the staleness bound derived from it, come from the systemd timers first (the mechanism this fleet now uses) and fall back to cron on hosts not yet migrated. It reads the unit files under `/etc/systemd/system` and friends, never `systemctl`, so it stays a pure reader. Auto-discovery picks up `/etc/rsnapshot.conf` and `/etc/rsnapshot-*.conf`, skipping packaging and editor leftovers (`.dpkg-dist`, `.dpkg-old`, `~`, `.bak`); an explicit `rsnapshot.configs` list in the config replaces discovery
 - **`temperature`, `network`, `filesystem`** are multi-instance: they emit one set of metrics per sensor, interface, or mount, distinguished by an instance label
 
 ## GPU support

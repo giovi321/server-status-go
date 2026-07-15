@@ -162,6 +162,7 @@ func (r *Rsnapshot) Collect(ctx context.Context) ([]model.Metric, error) {
 		{Key: "rsnapshot_configs", Name: "Rsnapshot configs", Value: len(targets), StateClass: "measurement", Kind: model.KindSensor, Category: "diagnostic", Icon: "mdi:backup-restore"},
 	}
 	entries, cronReadable := readCronEntries()
+	timers, timerReadable := readTimerUnits()
 	paths := make([]string, len(targets))
 	for i, t := range targets {
 		paths[i] = t.Path
@@ -174,7 +175,7 @@ func (r *Rsnapshot) Collect(ctx context.Context) ([]model.Metric, error) {
 				others = append(others, p)
 			}
 		}
-		in := r.gatherRsnapshot(t, others, entries, cronReadable)
+		in := r.gatherRsnapshot(t, others, entries, cronReadable, timers, timerReadable)
 		st := evaluateRsnapshot(in, now)
 		comp := rsnapComponent(t.Name)
 		compName := "Rsnapshot " + t.Name
@@ -189,8 +190,8 @@ const rsnapLogTailBytes = 256 * 1024
 
 // gatherRsnapshot reads the on-host evidence for one config: conf, log tail,
 // lockfile, interval directories, mount state, strays, and cron attribution.
-func (r *Rsnapshot) gatherRsnapshot(t rsnapTarget, others []string, cron []cronEntry, cronReadable bool) rsnapEvalInput {
-	in := rsnapEvalInput{MaxAge: t.MaxAge, Margin: r.margin, StuckAfter: r.stuckAfter, CronReadable: cronReadable}
+func (r *Rsnapshot) gatherRsnapshot(t rsnapTarget, others []string, cron []cronEntry, cronReadable bool, timers []timerUnit, timerReadable bool) rsnapEvalInput {
+	in := rsnapEvalInput{MaxAge: t.MaxAge, Margin: r.margin, StuckAfter: r.stuckAfter, CronReadable: cronReadable, TimerReadable: timerReadable}
 	data, err := os.ReadFile(t.Path)
 	in.ConfReadable = err == nil
 	if err == nil {
@@ -229,6 +230,7 @@ func (r *Rsnapshot) gatherRsnapshot(t rsnapTarget, others []string, cron []cronE
 		names = append(names, iv.Name)
 	}
 	in.CronMatches = matchRsnapshotCron(cron, t.Path, t.Path == "/etc/rsnapshot.conf", others, names)
+	in.TimerMatches = matchRsnapshotTimers(timers, t.Path, t.Path == "/etc/rsnapshot.conf", names)
 	return in
 }
 
@@ -432,6 +434,8 @@ func rsnapshotMetrics(component, componentName string, st rsnapStatus) []model.M
 		problem("rsnapshot_config_error", "Config error", st.ConfigError, "diagnostic"),
 		model.Metric{Key: "rsnapshot_cron_jobs", Component: component, ComponentName: componentName, Name: "Cron jobs", Value: st.CronJobs, StateClass: "measurement", Kind: model.KindSensor, Category: "diagnostic", Icon: "mdi:calendar-clock"},
 		text("rsnapshot_cron_list", "Cron list", st.CronList, "diagnostic", "mdi:calendar-clock"),
+		model.Metric{Key: "rsnapshot_timer_jobs", Component: component, ComponentName: componentName, Name: "Timer jobs", Value: st.TimerJobs, StateClass: "measurement", Kind: model.KindSensor, Category: "diagnostic", Icon: "mdi:timer-outline"},
+		text("rsnapshot_timer_list", "Timer list", st.TimerList, "diagnostic", "mdi:timer-outline"),
 		text("rsnapshot_intervals", "Intervals", st.IntervalsText, "diagnostic", "mdi:layers-triple-outline"),
 		text("rsnapshot_details", "Details", st.Details, "diagnostic", "mdi:information-outline"),
 	)
