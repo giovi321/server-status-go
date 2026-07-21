@@ -45,7 +45,13 @@ MQTT username [mqtt]:
 MQTT password:
 ```
 
-Any of these can be preset via environment variable to skip that one prompt — useful for scripted installs: `NODE_NAME`, `MQTT_HOST`, `MQTT_PORT`, `MQTT_USERNAME`, `MQTT_PASSWORD`. Pass `--non-interactive` (or run with no controlling terminal, e.g. from another script) to skip prompting entirely and get the old placeholder config to edit by hand. The password never goes into `config.yaml` — it's written straight to the chmod-600 `server-status.env` and referenced back as `${MQTT_PASSWORD}`. Re-running the installer on a host that already has a `config.yaml` never re-prompts; it only upgrades the binary and unit.
+Any of these can be preset via environment variable to skip that one prompt — useful for scripted installs: `NODE_NAME`, `MQTT_HOST`, `MQTT_PORT`, `MQTT_USERNAME`, `MQTT_PASSWORD`. Pass `--non-interactive` (or run with no controlling terminal, e.g. from another script) to skip prompting entirely and get the old placeholder config to edit by hand. The password never goes into `config.yaml` — it's written straight to the chmod-600 `server-status.env` and referenced back as `${MQTT_PASSWORD}`.
+
+Re-running the installer on a host that already has a `config.yaml` never re-prompts by default; it only upgrades the binary and unit. Pass `--reconfigure` to force the prompts again and overwrite `config.yaml` and `server-status.env` (note the `-s --` before the flag, required to pass arguments to a script piped over stdin):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/giovi321/server-status-go/main/scripts/install.sh | sudo bash -s -- --reconfigure
+```
 
 It performs these steps:
 

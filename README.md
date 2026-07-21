@@ -50,7 +50,7 @@ Collectors produce a normalized in-memory snapshot of metrics. One or more sinks
 curl -fsSL https://raw.githubusercontent.com/giovi321/server-status-go/main/scripts/install.sh | sudo bash
 ```
 
-This downloads the right release binary for the host's architecture (checksum-verified), prompts for the node name and MQTT broker details (skip with `--non-interactive`, or preset any answer via `NODE_NAME`/`MQTT_HOST`/`MQTT_PORT`/`MQTT_USERNAME`/`MQTT_PASSWORD`), then places the binary in `/opt/server-status/`, writes `/etc/server-status/config.yaml` and a chmod-600 `server-status.env` secret file, installs the systemd unit, and starts the service.
+This downloads the right release binary for the host's architecture (checksum-verified), prompts for the node name and MQTT broker details on first install (skip with `--non-interactive`, or preset any answer via `NODE_NAME`/`MQTT_HOST`/`MQTT_PORT`/`MQTT_USERNAME`/`MQTT_PASSWORD`; re-prompt on a host that's already configured with `... | sudo bash -s -- --reconfigure`), then places the binary in `/opt/server-status/`, writes `/etc/server-status/config.yaml` and a chmod-600 `server-status.env` secret file, installs the systemd unit, and starts the service.
 
 To build from source instead (Go 1.22+):
 

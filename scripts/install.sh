@@ -4,6 +4,7 @@
 #
 # Usage:
 #   sudo ./install.sh                 install/upgrade, prompting for config on first install
+#   sudo ./install.sh --reconfigure   re-run the config prompts even if config.yaml already exists
 #   sudo ./install.sh --non-interactive   skip prompts, write a placeholder config to edit by hand
 #   sudo ./install.sh --uninstall     stop the service, purge HA discovery, remove the unit
 #
@@ -28,19 +29,26 @@ BIN_DIR=/opt/server-status
 CFG_DIR=/etc/server-status
 UNIT=/etc/systemd/system/server-status.service
 NON_INTERACTIVE=0
-[[ "${1:-}" == "--non-interactive" ]] && NON_INTERACTIVE=1
+RECONFIGURE=0
 
-if [[ "${1:-}" == "--uninstall" ]]; then
-  systemctl disable --now server-status.service 2>/dev/null || true
-  if [[ -x "$BIN_DIR/server-status" && -f "$CFG_DIR/config.yaml" ]]; then
-    if [[ -f "$CFG_DIR/server-status.env" ]]; then set -a; . "$CFG_DIR/server-status.env"; set +a; fi
-    "$BIN_DIR/server-status" -c "$CFG_DIR/config.yaml" --purge 2>/dev/null || true
-  fi
-  rm -f "$UNIT"
-  systemctl daemon-reload
-  echo "Uninstalled service and cleared Home Assistant discovery. Left $CFG_DIR and $BIN_DIR in place."
-  exit 0
-fi
+for arg in "$@"; do
+  case "$arg" in
+    --uninstall)
+      systemctl disable --now server-status.service 2>/dev/null || true
+      if [[ -x "$BIN_DIR/server-status" && -f "$CFG_DIR/config.yaml" ]]; then
+        if [[ -f "$CFG_DIR/server-status.env" ]]; then set -a; . "$CFG_DIR/server-status.env"; set +a; fi
+        "$BIN_DIR/server-status" -c "$CFG_DIR/config.yaml" --purge 2>/dev/null || true
+      fi
+      rm -f "$UNIT"
+      systemctl daemon-reload
+      echo "Uninstalled service and cleared Home Assistant discovery. Left $CFG_DIR and $BIN_DIR in place."
+      exit 0
+      ;;
+    --non-interactive) NON_INTERACTIVE=1 ;;
+    --reconfigure) RECONFIGURE=1 ;;
+    *) echo "unknown option: $arg" >&2; exit 1 ;;
+  esac
+done
 
 case "$(uname -m)" in
   x86_64) ARCH=amd64 ;;
@@ -94,7 +102,7 @@ ask_secret() {
   printf '%s\n' "$ans"
 }
 
-if [[ ! -f "$CFG_DIR/config.yaml" ]]; then
+if [[ ! -f "$CFG_DIR/config.yaml" || "$RECONFIGURE" -eq 1 ]]; then
   node_name=${NODE_NAME:-$(hostname)}
   mqtt_host=${MQTT_HOST:-}
   mqtt_port=${MQTT_PORT:-1883}
@@ -130,7 +138,7 @@ if [[ ! -f "$CFG_DIR/config.yaml" ]]; then
   echo "Wrote config to $CFG_DIR/config.yaml."
 fi
 
-if [[ ! -f "$CFG_DIR/server-status.env" ]]; then
+if [[ ! -f "$CFG_DIR/server-status.env" || "$RECONFIGURE" -eq 1 ]]; then
   {
     printf '%s\n' "# Secrets for server-status, loaded into the service environment by systemd"
     printf '%s\n' "# (EnvironmentFile in the unit). Referenced from config.yaml as \${MQTT_PASSWORD}."
