@@ -34,13 +34,26 @@ It resolves the binary to install in this order:
 
 So if you already fetched a binary by hand or built from source, drop it next to `install.sh` (or point `SRC_BIN` at it) and it's used as-is; otherwise the script fetches and verifies one itself.
 
+On a first install (no `config.yaml` yet) it prompts for the node name and MQTT broker details, reading answers from `/dev/tty` so this works even piped through `curl`:
+
+```
+Configuring server-status. Press enter to accept a default in [brackets].
+Node name [gc01srvr]:
+MQTT broker host or IP: 192.168.1.65
+MQTT broker port [1883]:
+MQTT username [mqtt]:
+MQTT password:
+```
+
+Any of these can be preset via environment variable to skip that one prompt — useful for scripted installs: `NODE_NAME`, `MQTT_HOST`, `MQTT_PORT`, `MQTT_USERNAME`, `MQTT_PASSWORD`. Pass `--non-interactive` (or run with no controlling terminal, e.g. from another script) to skip prompting entirely and get the old placeholder config to edit by hand. The password never goes into `config.yaml` — it's written straight to the chmod-600 `server-status.env` and referenced back as `${MQTT_PASSWORD}`. Re-running the installer on a host that already has a `config.yaml` never re-prompts; it only upgrades the binary and unit.
+
 It performs these steps:
 
 | Step | Path | Notes |
 |------|------|-------|
 | Install binary | `/opt/server-status/server-status` | mode 0755 |
-| Write starter config (if absent) | `/etc/server-status/config.yaml` | edit before relying on it |
-| Write secret stub (if absent) | `/etc/server-status/server-status.env` | mode 0600, holds `MQTT_PASSWORD` |
+| Write config (if absent) | `/etc/server-status/config.yaml` | from prompts, or a placeholder to edit by hand |
+| Write secrets (if absent) | `/etc/server-status/server-status.env` | mode 0600, holds `MQTT_PASSWORD` |
 | Install unit | `/etc/systemd/system/server-status.service` | `Type=notify`, watchdog enabled |
 | Enable + start | | `systemctl enable --now` |
 
