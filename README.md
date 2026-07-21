@@ -46,14 +46,20 @@ Collectors produce a normalized in-memory snapshot of metrics. One or more sinks
 
 ## Install
 
-Download a release binary from the [releases page](https://github.com/giovi321/server-status-go/releases), or build from source (Go 1.22+):
+```bash
+curl -fsSL https://raw.githubusercontent.com/giovi321/server-status-go/main/scripts/install.sh | sudo bash
+```
+
+This downloads the right release binary for the host's architecture (checksum-verified), places it in `/opt/server-status/`, writes a default `/etc/server-status/config.yaml` and a chmod-600 `server-status.env` secret file, installs the systemd unit, and starts the service. Set `MQTT_PASSWORD` in `/etc/server-status/server-status.env`, then `sudo systemctl restart server-status`.
+
+To build from source instead (Go 1.22+):
 
 ```bash
+git clone https://github.com/giovi321/server-status-go.git
+cd server-status-go
 go build -o server-status ./cmd/server-status
 sudo ./scripts/install.sh
 ```
-
-The installer places the binary in `/opt/server-status/`, writes a default `/etc/server-status/config.yaml` and a chmod-600 `server-status.env` secret file, installs the systemd unit, and starts the service. Set `MQTT_PASSWORD` in `/etc/server-status/server-status.env`, then `sudo systemctl restart server-status`.
 
 Preview what a host would publish without connecting to a broker:
 

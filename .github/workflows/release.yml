@@ -22,6 +22,7 @@ jobs:
               -o "$out" ./cmd/server-status
             ( cd dist && sha256sum "server-status-linux-$arch" > "server-status-linux-$arch.sha256" )
           done
+          cp scripts/install.sh dist/install.sh
       - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}

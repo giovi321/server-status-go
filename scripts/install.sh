@@ -1,12 +1,26 @@
 #!/usr/bin/env bash
-# Install or upgrade server-status from a locally built binary.
-# Usage: sudo ./scripts/install.sh [--uninstall]
+# Install, upgrade, or uninstall server-status. Self-contained: works from a
+# git checkout, from a bare downloaded binary, or with no local files at all.
+#
+# Usage:
+#   sudo ./install.sh                 install/upgrade
+#   sudo ./install.sh --uninstall     stop the service, purge HA discovery, remove the unit
+#
+# One-liner (no clone, no manual download):
+#   curl -fsSL https://raw.githubusercontent.com/giovi321/server-status-go/main/scripts/install.sh | sudo bash
+#
+# Binary resolution order:
+#   1. $SRC_BIN, if set
+#   2. ./server-status
+#   3. ./server-status-linux-<arch>   (the release asset, as downloaded, no rename needed)
+#   4. downloaded from the $REPO release tagged $VERSION (default: latest), checksum-verified
 set -euo pipefail
 
+REPO=${REPO:-giovi321/server-status-go}
+VERSION=${VERSION:-latest}
 BIN_DIR=/opt/server-status
 CFG_DIR=/etc/server-status
 UNIT=/etc/systemd/system/server-status.service
-SRC_BIN=${SRC_BIN:-./server-status}
 
 if [[ "${1:-}" == "--uninstall" ]]; then
   systemctl disable --now server-status.service 2>/dev/null || true
@@ -20,13 +34,42 @@ if [[ "${1:-}" == "--uninstall" ]]; then
   exit 0
 fi
 
-if [[ ! -f "$SRC_BIN" ]]; then
-  echo "Binary not found at $SRC_BIN. Build it first: go build -o server-status ./cmd/server-status" >&2
-  exit 1
-fi
+case "$(uname -m)" in
+  x86_64) ARCH=amd64 ;;
+  aarch64|arm64) ARCH=arm64 ;;
+  *) echo "unsupported architecture: $(uname -m)" >&2; exit 1 ;;
+esac
+ASSET="server-status-linux-$ARCH"
+
+resolve_binary() {
+  if [[ -n "${SRC_BIN:-}" ]]; then
+    [[ -f "$SRC_BIN" ]] || { echo "SRC_BIN=$SRC_BIN not found" >&2; exit 1; }
+    printf '%s\n' "$SRC_BIN"
+    return
+  fi
+  if [[ -f "./server-status" ]]; then printf '%s\n' "./server-status"; return; fi
+  if [[ -f "./$ASSET" ]]; then printf '%s\n' "./$ASSET"; return; fi
+
+  command -v curl >/dev/null || { echo "no local binary found and curl is missing to download one; install curl or set SRC_BIN" >&2; exit 1; }
+  local base tmpdir
+  if [[ "$VERSION" == "latest" ]]; then
+    base="https://github.com/$REPO/releases/latest/download"
+  else
+    base="https://github.com/$REPO/releases/download/$VERSION"
+  fi
+  tmpdir=$(mktemp -d)
+  echo "no local binary found; downloading $ASSET ($VERSION) from $REPO" >&2
+  curl -fL -o "$tmpdir/$ASSET" "$base/$ASSET"
+  curl -fL -o "$tmpdir/$ASSET.sha256" "$base/$ASSET.sha256"
+  ( cd "$tmpdir" && sha256sum -c "$ASSET.sha256" ) >&2
+  chmod +x "$tmpdir/$ASSET"
+  printf '%s\n' "$tmpdir/$ASSET"
+}
+
+SRC=$(resolve_binary)
 
 install -d "$BIN_DIR" "$CFG_DIR"
-install -m 0755 "$SRC_BIN" "$BIN_DIR/server-status"
+install -m 0755 "$SRC" "$BIN_DIR/server-status"
 
 if [[ ! -f "$CFG_DIR/config.yaml" ]]; then
   cat > "$CFG_DIR/config.yaml" <<'YAML'
@@ -51,7 +94,31 @@ ENVEOF
   echo "Wrote secret stub to $CFG_DIR/server-status.env (set MQTT_PASSWORD there; it is chmod 600)."
 fi
 
-install -m 0644 packaging/server-status.service "$UNIT"
+# Kept identical to packaging/server-status.service so the script has no other file dependency.
+cat > "$UNIT" <<'UNITEOF'
+[Unit]
+Description=server-status metrics publisher
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+WatchdogSec=180
+User=root
+EnvironmentFile=-/etc/server-status/server-status.env
+ExecStart=/opt/server-status/server-status -c /etc/server-status/config.yaml
+Restart=always
+RestartSec=15s
+TimeoutStopSec=10s
+# Sandboxing that does not block hardware access; expanded in a later reliability plan.
+ProtectHome=true
+NoNewPrivileges=false
+
+[Install]
+WantedBy=multi-user.target
+UNITEOF
+chmod 0644 "$UNIT"
+
 systemctl daemon-reload
 systemctl enable server-status.service
 systemctl restart server-status.service

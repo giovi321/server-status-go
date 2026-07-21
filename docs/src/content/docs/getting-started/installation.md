@@ -15,38 +15,24 @@ server-status runs on each host you want to monitor. It is a single static binar
 server-status only publishes state. Alerting and automation belong in Home Assistant or whatever consumes the webhook. There is nothing to configure on the agent for notifications.
 :::
 
-## Get the binary
-
-### From a release (recommended)
-
-Download the binary for your architecture and its checksum from the [releases page](https://github.com/giovi321/server-status-go/releases):
-
-```bash
-arch=amd64   # or arm64
-ver=v1.0.0
-base=https://github.com/giovi321/server-status-go/releases/download/$ver
-curl -fsSLO "$base/server-status-linux-$arch"
-curl -fsSLO "$base/server-status-linux-$arch.sha256"
-sha256sum -c "server-status-linux-$arch.sha256"
-mv "server-status-linux-$arch" server-status
-chmod +x server-status
-```
-
-### From source
-
-```bash
-git clone https://github.com/giovi321/server-status-go.git
-cd server-status-go
-go build -o server-status ./cmd/server-status
-```
-
 ## Install as a service
 
-The repository ships `scripts/install.sh`, which installs the binary, writes a starter config, installs the systemd unit, and starts the service. Run it from the repo root with the built (or downloaded) binary present as `./server-status`:
+`scripts/install.sh` does everything: it resolves a binary (downloading one if needed), installs it, writes a starter config, installs the systemd unit, and starts the service. It needs no other file from the repo, so it can run standalone with nothing pre-downloaded:
 
 ```bash
-sudo ./scripts/install.sh
+curl -fsSL https://raw.githubusercontent.com/giovi321/server-status-go/main/scripts/install.sh | sudo bash
 ```
+
+The same script is also attached to every [release](https://github.com/giovi321/server-status-go/releases) as `install.sh`, so `https://github.com/giovi321/server-status-go/releases/latest/download/install.sh` works too.
+
+It resolves the binary to install in this order:
+
+1. `$SRC_BIN`, if set
+2. `./server-status`
+3. `./server-status-linux-<arch>` — the release asset exactly as downloaded, no rename needed
+4. otherwise it downloads `server-status-linux-<arch>` for the detected architecture from the latest GitHub release (or `$VERSION`, e.g. `VERSION=v1.0.0`), verifying its `.sha256` checksum
+
+So if you already fetched a binary by hand or built from source, drop it next to `install.sh` (or point `SRC_BIN` at it) and it's used as-is; otherwise the script fetches and verifies one itself.
 
 It performs these steps:
 
@@ -58,7 +44,14 @@ It performs these steps:
 | Install unit | `/etc/systemd/system/server-status.service` | `Type=notify`, watchdog enabled |
 | Enable + start | | `systemctl enable --now` |
 
-You can point the installer at a binary elsewhere with `SRC_BIN=/path/to/server-status sudo -E ./scripts/install.sh`.
+### Building from source instead
+
+```bash
+git clone https://github.com/giovi321/server-status-go.git
+cd server-status-go
+go build -o server-status ./cmd/server-status
+sudo ./scripts/install.sh
+```
 
 ## Configure
 
