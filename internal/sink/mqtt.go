@@ -54,8 +54,6 @@ func (m *MQTT) Connect() error {
 		SetClientID("server-status-"+m.dev.Node).
 		SetKeepAlive(30*time.Second).
 		SetAutoReconnect(true).
-		SetConnectRetry(true).
-		SetConnectRetryInterval(5*time.Second).
 		SetMaxReconnectInterval(60*time.Second).
 		SetWill(m.availTopic, "offline", byte(m.sc.QoS), true)
 	if m.sc.Username != "" {
