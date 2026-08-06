@@ -3,7 +3,7 @@ title: "Metrics reference"
 description: "Every metric key, its unit, entity type, and category"
 ---
 
-This is the complete catalog: 17 collectors, 86 distinct metric keys. Column meanings:
+This is the complete catalog: 17 collectors, 88 distinct metric keys. Column meanings:
 
 - **kind** is the entity type. `sensor` and `binary_sensor` map to those Home Assistant domains. `text` is published as a plain `sensor` (there is no separate text domain in the discovery)
 - **category** `primary` entities show as normal controls; `diagnostic` entities are grouped under the device's diagnostic section in Home Assistant

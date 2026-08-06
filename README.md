@@ -8,7 +8,7 @@ This is the Go rewrite of the original Python `server-status` tool, which is arc
 
 ## Status
 
-Feature-complete, released as `v1.0.0`. All collectors, MQTT and webhook sinks, the HTTP/MQTT control surface, self-update, and reliability hardening are implemented and validated against a live Home Assistant.
+Feature-complete and in production. All collectors, MQTT and webhook sinks, the HTTP/MQTT control surface, self-update, and reliability hardening are implemented and validated against a live Home Assistant. See [releases](https://github.com/giovi321/server-status-go/releases) for the current version.
 
 ## What it does
 
@@ -52,7 +52,7 @@ curl -fsSL https://raw.githubusercontent.com/giovi321/server-status-go/main/scri
 
 This downloads the right release binary for the host's architecture (checksum-verified), prompts for the node name and MQTT broker details on first install (skip with `--non-interactive`, or preset any answer via `NODE_NAME`/`MQTT_HOST`/`MQTT_PORT`/`MQTT_USERNAME`/`MQTT_PASSWORD`; re-prompt on a host that's already configured with `... | sudo bash -s -- --reconfigure`), then places the binary in `/opt/server-status/`, writes `/etc/server-status/config.yaml` and a chmod-600 `server-status.env` secret file, installs the systemd unit, and starts the service.
 
-To build from source instead (Go 1.22+):
+To build from source instead (Go 1.26+, per the `go` directive in `go.mod`):
 
 ```bash
 git clone https://github.com/giovi321/server-status-go.git

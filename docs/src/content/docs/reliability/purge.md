@@ -18,7 +18,13 @@ The uninstaller runs this automatically; see [Installation → Uninstall](../../
 3. **Availability**. Clear the availability topic
 4. **Graceful disconnect**. Disconnect cleanly so the MQTT last-will does not fire, which would otherwise republish a retained `offline` onto the availability topic that was just cleared
 
-The result: Home Assistant removes the device and all of its entities, with nothing left retained on the broker for that node.
+The result: Home Assistant removes the device and all of its entities.
+
+`--purge` clears the discovery configs and the availability topic. It does not clear retained **state** or **attribute** topics, which only exist when the sink runs with `retain: true` (the default is `false`, in which case there is nothing left behind). Those topics create no Home Assistant entities on their own, so the device still disappears; clear them by hand if you want the broker completely empty for that node:
+
+```bash
+mosquitto_sub -h <broker> -t 'server-status/<node>/#' -v --retained-only
+```
 
 :::note[Stop the service first]
 The uninstaller stops the service before purging so the running agent and the purge do not fight over the shared MQTT client id. If you run `--purge` by hand against a host whose service is still running, stop the service first (`systemctl stop server-status`).

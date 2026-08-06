@@ -9,7 +9,7 @@ server-status runs on each host you want to monitor. It is a single static binar
 
 - A **Linux host** (built and tested for Debian and Ubuntu, amd64 or arm64). It reads `/proc` and `/sys` and shells out to a few standard tools when present (`smartctl`, `docker`, `nvidia-smi`, `zpool`, and so on)
 - An **MQTT broker** reachable from the host (for the Home Assistant integration). A webhook-only setup needs no broker
-- Either a **release binary** (recommended) or **Go 1.22+** to build from source
+- Either a **release binary** (recommended) or **Go 1.26+** to build from source
 
 :::note[Where thresholds live]
 server-status only publishes state. Alerting and automation belong in Home Assistant or whatever consumes the webhook. There is nothing to configure on the agent for notifications.
@@ -114,7 +114,7 @@ Within one cycle (default 60 seconds) the host appears in Home Assistant as a de
 
 ## Upgrade
 
-Once a release is available, the agent can update itself: press the **Update** button on the host's device in Home Assistant, or send the `update` control command. See [Self-update](../../control/self-update/). To upgrade manually, replace `/opt/server-status/server-status` with the new binary (or re-run `install.sh`) and restart the service.
+Once a release is available, the agent can update itself. Send the `update` control command, either over MQTT (publish `1` to `server-status/<node>/cmd/update`) or over HTTP (`POST /command/update`). See [Self-update](../../control/self-update/). To upgrade manually, replace `/opt/server-status/server-status` with the new binary (or re-run `install.sh`) and restart the service.
 
 ## Uninstall
 

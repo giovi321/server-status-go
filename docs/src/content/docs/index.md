@@ -89,7 +89,7 @@ It is a pure state publisher. Thresholds, alerts, and automations live in Home A
 - **Device hierarchy**. Disks, RAID arrays, GPUs, and docker attach as sub-devices via `via_device`, and a host can be nested under a parent host (a VM under its hypervisor).
 - **Broad hardware and software coverage**. CPU, memory, swap, load, uptime, filesystems, network, temperatures, APT updates, systemd failed units, SMART, mdadm, ZFS, GPU, and docker inventory plus update availability.
 - **MQTT and webhook parity**. The same snapshot is published to MQTT and POSTed to a webhook, so a second consumer such as n8n sees identical data.
-- **Self-update**. A Home Assistant button (or a control command) pulls the latest signed release from GitHub, verifies its checksum, and swaps the binary atomically.
+- **Self-update**. A control command pulls the latest release from GitHub, verifies it against the published sha256, and swaps the binary atomically.
 - **Control surface**. Refresh, restart, and update on demand over HTTP or MQTT, plus a read-only HTTP snapshot endpoint.
 - **Reliable by default**. Per-collector timeouts and panic isolation, a systemd sd_notify watchdog, and a `--purge` uninstall that removes the host from Home Assistant cleanly.
 - **Single static binary**. No runtime dependencies, no agent-side database. Built for Debian and Ubuntu, amd64 and arm64.
@@ -97,7 +97,7 @@ It is a pure state publisher. Thresholds, alerts, and automations live in Home A
 ## Quick start
 
 ```bash
-# Build (Go 1.22+), or download a release binary
+# Build (Go 1.26+), or download a release binary
 go build -o server-status ./cmd/server-status
 
 # Point it at your broker and run one cycle

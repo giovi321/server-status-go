@@ -9,9 +9,13 @@ The agent can replace its own binary with the latest GitHub release, verify the 
 
 Any of these runs the `update` command:
 
-- Press **Install** on the host's **Agent** update entity in Home Assistant
 - Publish `1` to `server-status/<node>/cmd/update`
 - `POST /command/update` on the [HTTP control API](../http/)
+- The Install action on the host's **Agent** update entity in Home Assistant
+
+:::note[Prefer the command topic]
+The agent does not publish the update entity's state topic, so Home Assistant has no `installed_version` or `latest_version` for it and cannot show that an update is available. The command topic and the HTTP endpoint are unaffected. See [MQTT topics](../../reference/topics/#agent-update-entity).
+:::
 
 ## What happens
 
