@@ -73,3 +73,5 @@ Any of these runs the `update` command:
 :::note[On-demand]
 Updates run when you trigger them (button or command). `update.check_interval_seconds` is the configured check interval; the agent does not silently self-update in the background.
 :::
+
+To roll a release across every host rather than one, see [Upgrading a fleet](../fleet-upgrade/).

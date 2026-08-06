@@ -75,6 +75,7 @@ export default defineConfig({
             { label: 'HTTP control API', link: '/control/http/' },
             { label: 'MQTT commands', link: '/control/mqtt/' },
             { label: 'Self-update', link: '/control/self-update/' },
+            { label: 'Upgrading a fleet', link: '/control/fleet-upgrade/' },
             { label: 'Webhook sink', link: '/control/webhook/' },
           ],
         },
