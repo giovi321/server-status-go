@@ -54,6 +54,10 @@ func (Systemd) Collect(ctx context.Context) ([]model.Metric, error) {
 	}
 	return []model.Metric{
 		{Key: "systemd_failed_units", Name: "Failed units", Value: len(units), StateClass: "measurement", Kind: model.KindSensor, Category: "primary", Icon: "mdi:alert-circle"},
-		{Key: "systemd_failed_list", Name: "Failed units list", Value: list, Kind: model.KindText, Category: "diagnostic"},
+		// A long enough list passes Home Assistant's 255-character state limit,
+		// which costs the whole update. The state is clipped on publish; the
+		// unit names survive intact as attributes.
+		{Key: "systemd_failed_list", Name: "Failed units list", Value: list, Kind: model.KindText, Category: "diagnostic",
+			Attributes: listAttributes("units", units)},
 	}, nil
 }

@@ -68,6 +68,44 @@ func TestDiscoveryDiagnosticCategory(t *testing.T) {
 	}
 }
 
+func TestDiscoveryAttributesTopic(t *testing.T) {
+	dev := model.Device{Node: "gc01srvr", Name: "gc01srvr", Identifier: "server-status-gc01srvr", Hierarchy: "grouped"}
+	sc := config.SinkConfig{BaseTopic: "server-status", DiscoveryPrefix: "homeassistant"}
+	m := model.Metric{
+		Key: "docker_containers", Component: "docker", ComponentName: "Docker", Name: "Containers",
+		Value: 12, Kind: model.KindSensor, Category: "diagnostic",
+		Attributes: map[string]any{"containers": []string{"a", "b"}},
+	}
+	topic, payload, err := Discovery(dev, m, sc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The entity id must not move: existing dashboards reference it.
+	if topic != "homeassistant/sensor/gc01srvr/gc01srvr_docker_docker_containers/config" {
+		t.Fatalf("topic: %q", topic)
+	}
+	var obj map[string]any
+	if err := json.Unmarshal(payload, &obj); err != nil {
+		t.Fatal(err)
+	}
+	if obj["json_attributes_topic"] != "server-status/gc01srvr/docker/docker_containers/attributes" {
+		t.Fatalf("json_attributes_topic: %v", obj["json_attributes_topic"])
+	}
+
+	// A metric without attributes must not gain the key at all, or Home
+	// Assistant subscribes to a topic nothing ever publishes.
+	plain := model.Metric{Key: "cpu_usage", Name: "CPU usage", Value: 5, Kind: model.KindSensor}
+	_, payload, err = Discovery(dev, plain, sc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	obj = map[string]any{}
+	_ = json.Unmarshal(payload, &obj)
+	if _, ok := obj["json_attributes_topic"]; ok {
+		t.Fatal("metric without attributes must omit json_attributes_topic")
+	}
+}
+
 func TestDiscoveryBinarySensor(t *testing.T) {
 	dev := model.Device{Node: "n", Identifier: "server-status-n"}
 	m := model.Metric{Key: "reboot_required", Name: "Reboot required", Value: true, Kind: model.KindBinarySensor, Category: "primary"}

@@ -17,6 +17,18 @@ Everything the MQTT sink publishes lives under two roots: the `base_topic` (defa
 
 State values are plain strings. Binary sensors use `ON`/`OFF`. State is retained only when the sink's `retain` is `true` (default `false`).
 
+Home Assistant discards a state longer than 255 characters, so string states are clipped to that length on publish.
+
+## Attributes
+
+```
+<base>/<node>[/<component>]/<key>[/<instance>]/attributes
+```
+
+Metrics that carry more detail than a 255-character state can hold publish a JSON object here, and their discovery config points `json_attributes_topic` at it. Home Assistant surfaces the object's keys as entity attributes, which have no length limit. Example: `server-status/gc01srvr/docker/docker_containers/attributes`.
+
+The payload is always a JSON object, never a bare array, so no `json_attributes_template` is involved. It follows the same `retain` setting as state. Metrics without attributes publish nothing here and omit `json_attributes_topic` entirely.
+
 ## Availability
 
 ```

@@ -155,7 +155,12 @@ func smartMetrics(cfg config.Config, disk string, si SmartInfo) []model.Metric {
 	out = append(out, diag("disk_rotation", "Rotation", rot))
 	if strings.EqualFold(cfg.SmartAttributes, "full") {
 		if raw, err := json.Marshal(si); err == nil {
-			out = append(out, diag("disk_smart_raw", "SMART raw", string(raw)))
+			// The dump is always past Home Assistant's 255-character state
+			// limit, so the state carries a clipped preview and the parsed
+			// output rides in attributes.
+			m := diag("disk_smart_raw", "SMART raw", string(raw))
+			m.Attributes = map[string]any{"smart": si}
+			out = append(out, m)
 		}
 	}
 	return out

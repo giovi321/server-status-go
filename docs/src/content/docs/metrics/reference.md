@@ -11,6 +11,14 @@ This is the complete catalog: 17 collectors, 86 distinct metric keys. Column mea
 
 Values are published as strings on MQTT; binary sensors use `ON`/`OFF`.
 
+## State length and attributes
+
+Home Assistant rejects any state longer than 255 characters outright: the update is discarded and the entity falls back to `unknown`. Every string state is therefore clipped to 255 characters on publish, with `...` marking the cut.
+
+Detail that must survive intact is published as entity attributes instead, which carry no such limit. A metric with attributes gets a `json_attributes_topic` in its discovery config pointing at `<state topic>/attributes`, where the agent publishes a JSON object. The metrics that use it are noted in the tables below.
+
+Attributes are not unbounded either: Home Assistant's recorder refuses to store an attribute object over 16384 bytes, so lists are trimmed to fit and the number of dropped entries is reported as an `omitted` attribute.
+
 ## Core
 
 | key | name | unit | kind | category |
@@ -65,6 +73,8 @@ Read from hwmon. Instance is `<chip>-<sensor>` so identically named chips do not
 | `systemd_failed_units` | Failed units | | sensor | primary |
 | `systemd_failed_list` | Failed units list | | text | diagnostic |
 
+`systemd_failed_list` is `none` or the comma-joined unit names, clipped to 255 characters. The complete set is always available as its `units` attribute.
+
 ## SMART (per disk sub-device)
 
 Each physical disk is a sub-device. A metric appears only when the value is present in the `smartctl` output, so ATA and NVMe disks expose different subsets.
@@ -89,7 +99,7 @@ Each physical disk is a sub-device. A metric appears only when the value is pres
 | `disk_firmware` | Firmware | | text | diagnostic | |
 | `disk_capacity` | Capacity | B | sensor | diagnostic | |
 | `disk_rotation` | Rotation | | text | diagnostic | `SSD` or `<N> rpm` |
-| `disk_smart_raw` | SMART raw | | text | diagnostic | only with `smart_attributes: full` |
+| `disk_smart_raw` | SMART raw | | text | diagnostic | only with `smart_attributes: full`; the parsed output is in the `smart` attribute, the state is a clipped preview |
 
 ## mdadm (per array sub-device)
 
@@ -133,7 +143,16 @@ Each physical disk is a sub-device. A metric appears only when the value is pres
 | `docker_restarting` | Restarting | | sensor | primary | |
 | `docker_unhealthy` | Unhealthy | | sensor | primary | |
 | `docker_updates_available` | Updates available | | sensor | primary | distinct images with a newer registry digest |
-| `docker_containers` | Containers | | text | diagnostic | JSON inventory of every container |
+| `docker_containers` | Containers | | sensor | diagnostic | total containers; the inventory is in the entity's attributes |
+
+`docker_containers` carries the full inventory under its `containers` attribute, one object per container with `name`, `image`, `state`, `health`, `project`, and `update`. Per-container health and update flags are exposed nowhere else, so this is the only way to see that one container is `unhealthy` or that a specific image has a newer registry digest.
+
+Example template sensor for the unhealthy container names:
+
+```yaml
+{{ state_attr('sensor.<host>_docker_containers', 'containers')
+   | selectattr('health', 'eq', 'unhealthy') | map(attribute='name') | list }}
+```
 
 ## Rsnapshot (per config sub-device)
 

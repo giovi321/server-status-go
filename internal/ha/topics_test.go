@@ -1,7 +1,9 @@
 package ha
 
 import (
+	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/giovi321/server-status/internal/model"
 )
@@ -68,6 +70,41 @@ func TestStateValue(t *testing.T) {
 	}
 	if got := StateValue(model.Metric{Kind: model.KindBinarySensor, Value: false}); got != "OFF" {
 		t.Fatalf("bool false: %q", got)
+	}
+}
+
+// Home Assistant rejects the whole update when a state exceeds 255 characters,
+// leaving the entity "unknown", so an over-long value must arrive clipped.
+func TestStateValueClipsOverlongState(t *testing.T) {
+	got := StateValue(model.Metric{Value: strings.Repeat("a", 1603), Kind: model.KindText})
+	if len([]rune(got)) != MaxStateLength {
+		t.Fatalf("clipped length %d, want %d", len([]rune(got)), MaxStateLength)
+	}
+	if !strings.HasSuffix(got, "...") {
+		t.Fatalf("clipped state should mark the cut: %q", got)
+	}
+	if short := StateValue(model.Metric{Value: "ok", Kind: model.KindText}); short != "ok" {
+		t.Fatalf("short state must pass through: %q", short)
+	}
+}
+
+// Clipping counts characters, matching Home Assistant, and never splits a rune.
+func TestClipStateIsRuneSafe(t *testing.T) {
+	got := ClipState(strings.Repeat("é", 400))
+	if len([]rune(got)) != MaxStateLength {
+		t.Fatalf("rune length %d, want %d", len([]rune(got)), MaxStateLength)
+	}
+	if !utf8.ValidString(got) {
+		t.Fatalf("clip split a rune: %q", got)
+	}
+}
+
+func TestAttributesTopic(t *testing.T) {
+	if got := AttributesTopic("server-status", "gc01srvr", "docker", "docker_containers", ""); got != "server-status/gc01srvr/docker/docker_containers/attributes" {
+		t.Fatalf("attributes topic: %q", got)
+	}
+	if got := AttributesTopic("server-status", "gc01srvr", "", "fs_usage", "root"); got != "server-status/gc01srvr/fs_usage/root/attributes" {
+		t.Fatalf("instance attributes topic: %q", got)
 	}
 }
 

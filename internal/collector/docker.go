@@ -2,7 +2,6 @@ package collector
 
 import (
 	"context"
-	"encoding/json"
 	"os"
 	"os/exec"
 	"strings"
@@ -80,9 +79,17 @@ func dockerMetrics(cs []ContainerInfo, updates map[string]bool) []model.Metric {
 		}
 		reports = append(reports, containerReport{Name: c.Name, Image: c.Image, State: c.State, Health: c.Health, Project: c.Project, Update: up})
 	}
-	listJSON, _ := json.Marshal(reports)
 	count := func(key, leaf string, v int, icon string) model.Metric {
 		return model.Metric{Key: key, Component: comp, ComponentName: name, Name: leaf, Value: v, StateClass: "measurement", Kind: model.KindSensor, Category: "primary", Icon: icon}
+	}
+	// The inventory rides in attributes rather than the state: Home Assistant
+	// discards any state over 255 characters, and the JSON list passes that on
+	// any host running more than a handful of containers. The state is the
+	// total container count, which is what the entity name promises anyway.
+	containers := model.Metric{
+		Key: "docker_containers", Component: comp, ComponentName: name, Name: "Containers",
+		Value: len(cs), StateClass: "measurement", Kind: model.KindSensor, Category: "diagnostic",
+		Icon: "mdi:docker", Attributes: listAttributes("containers", reports),
 	}
 	return []model.Metric{
 		count("docker_running", "Running", running, "mdi:docker"),
@@ -90,7 +97,7 @@ func dockerMetrics(cs []ContainerInfo, updates map[string]bool) []model.Metric {
 		count("docker_restarting", "Restarting", restarting, "mdi:restart-alert"),
 		count("docker_unhealthy", "Unhealthy", unhealthy, "mdi:heart-broken"),
 		count("docker_updates_available", "Updates available", updatesAvail, "mdi:package-up"),
-		{Key: "docker_containers", Component: comp, ComponentName: name, Name: "Containers", Value: string(listJSON), Kind: model.KindText, Category: "diagnostic"},
+		containers,
 	}
 }
 

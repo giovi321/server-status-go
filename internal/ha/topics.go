@@ -6,9 +6,21 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/giovi321/server-status/internal/model"
 )
+
+// MaxStateLength is Home Assistant's hard cap on a state string. An update
+// whose state is longer is rejected outright — the entity falls back to
+// "unknown" and the value is lost — so every string state is clipped to fit.
+const MaxStateLength = 255
+
+// MaxAttributesBytes is the recorder's cap on the serialized attribute object
+// (MAX_STATE_ATTRS_BYTES in homeassistant/components/recorder/db_schema.py).
+// Larger attributes still reach the state machine but are not written to the
+// database, so history loses them.
+const MaxAttributesBytes = 16384
 
 var instNonSlug = regexp.MustCompile(`[^a-z0-9]+`)
 
@@ -34,6 +46,12 @@ func StateTopic(base, node, component, key, instance string) string {
 		parts += "/" + InstanceSlug(instance)
 	}
 	return parts
+}
+
+// AttributesTopic is where a metric's JSON attribute object is published. It
+// hangs off the state topic so a metric's state and attributes stay adjacent.
+func AttributesTopic(base, node, component, key, instance string) string {
+	return StateTopic(base, node, component, key, instance) + "/attributes"
 }
 
 // AvailabilityTopic is the per-host LWT topic.
@@ -78,7 +96,18 @@ func DiscoveryTopic(prefix string, k model.Kind, node, objectID string) string {
 	return fmt.Sprintf("%s/%s/%s/%s/config", prefix, Component(k), node, objectID)
 }
 
-// StateValue renders a metric value into its MQTT string payload.
+// ClipState shortens s to MaxStateLength runes, marking the cut with "...".
+// Home Assistant counts characters, not bytes, so the budget is runes.
+func ClipState(s string) string {
+	if utf8.RuneCountInString(s) <= MaxStateLength {
+		return s
+	}
+	return string([]rune(s)[:MaxStateLength-3]) + "..."
+}
+
+// StateValue renders a metric value into its MQTT string payload. String values
+// are clipped: an over-long state is discarded by Home Assistant, so a truncated
+// state beats no state at all. Detail that must survive belongs in Attributes.
 func StateValue(m model.Metric) string {
 	if m.Kind == model.KindBinarySensor {
 		if b, ok := m.Value.(bool); ok {
@@ -90,7 +119,7 @@ func StateValue(m model.Metric) string {
 	}
 	switch v := m.Value.(type) {
 	case string:
-		return v
+		return ClipState(v)
 	case int:
 		return strconv.Itoa(v)
 	case int64:
@@ -98,6 +127,6 @@ func StateValue(m model.Metric) string {
 	case float64:
 		return strconv.FormatFloat(v, 'f', -1, 64)
 	default:
-		return fmt.Sprintf("%v", v)
+		return ClipState(fmt.Sprintf("%v", v))
 	}
 }

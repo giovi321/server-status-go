@@ -16,6 +16,14 @@ For a host with node `gc01srvr` and friendly name "GC01 srvr":
 
 Entities use `has_entity_name`, so Home Assistant shows short labels ("CPU usage", "Load 1m") under the device rather than repeating the host name in every entity.
 
+## Attributes
+
+Home Assistant refuses any state longer than 255 characters and drops the whole update, so a metric that carries a list or an inventory publishes it as entity attributes instead. Its discovery config gains a `json_attributes_topic` pointing at `<state topic>/attributes`, where the agent publishes a JSON object; Home Assistant exposes the object's keys as attributes on the entity. The state itself stays short — a count, or a clipped version of the text.
+
+`docker_containers` is the main case: its state is the container count and its `containers` attribute holds the full inventory including per-container health and update flags. See the [metrics reference](../../metrics/reference/) for the others.
+
+Upgrading an agent is all that is needed to switch an existing entity over. Discovery is retained and re-sent on every connect, so the new config with `json_attributes_topic` replaces the old one and the entity keeps its id and its history. No Home Assistant restart, and no change to any dashboard or automation that reads the entity.
+
 ## Availability
 
 Every entity's `availability_topic` points at `<base>/<node>/availability`. The agent publishes `online` (retained) on connect and `offline` on clean shutdown; the MQTT last-will publishes `offline` if the connection drops unexpectedly. When a host is down, all its entities show as unavailable rather than holding a stale value.
