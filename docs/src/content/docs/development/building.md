@@ -11,7 +11,7 @@ server-status is a single Go module, `github.com/giovi321/server-status`, with n
 go build -o server-status ./cmd/server-status
 ```
 
-Go 1.22 or newer. Builds are fully static (`CGO_ENABLED=0`), so the binary runs on any Linux of the target architecture without shared-library dependencies.
+Go 1.26 or newer: `go.mod` sets `go 1.26.4`, so an older toolchain either downloads it (the default `GOTOOLCHAIN=auto`) or refuses to build. Builds are fully static (`CGO_ENABLED=0`), so the binary runs on any Linux of the target architecture without shared-library dependencies.
 
 Cross-compile for another architecture:
 
@@ -52,7 +52,7 @@ internal/
 
 1. Create `internal/collector/<name>.go` implementing the `Collector` interface: `Name() string`, `Available() bool`, `Collect(ctx) ([]model.Metric, error)`
 2. Keep parsing pure. Read the raw source (a `/proc` file, a command's output) in one function and parse it in another so the parser can be fixture-tested
-3. Emit `model.Metric` values. Set `Component`/`ComponentName` for sub-device metrics and `Instance` for multi-instance metrics
+3. Emit `model.Metric` values. Set `Component`/`ComponentName` for sub-device metrics and `Instance` for multi-instance metrics. Anything that could exceed a 255-character state (a list, an inventory) belongs in `Attributes`, not `Value`; see [Metrics reference](../../metrics/reference/#state-length-and-attributes)
 4. Register it in `detect.All()` in `internal/detect/detect.go`
 5. Add a test with a fixture for the parser
 

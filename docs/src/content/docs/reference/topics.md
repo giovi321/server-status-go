@@ -75,7 +75,11 @@ The update entity's discovery sets its state topic to:
 <base>/<node>/agent/update            JSON {installed_version, latest_version}
 ```
 
-The Install action maps to the `update` command topic. The Install button is functional today; publishing the installed/latest version state is a known follow-up.
+The Install action maps to the `update` command topic.
+
+:::caution[Nothing publishes this topic yet]
+The agent never writes to `<base>/<node>/agent/update`, so Home Assistant sees no `installed_version` or `latest_version` and cannot tell whether an update exists. Trigger updates by publishing `1` to `<base>/<node>/cmd/update` (or `POST /command/update`), which works regardless. Populating the state is a known follow-up.
+:::
 
 ## Connection behavior
 
