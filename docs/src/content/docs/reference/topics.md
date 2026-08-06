@@ -77,9 +77,20 @@ The update entity's discovery sets its state topic to:
 
 The Install action maps to the `update` command topic.
 
-:::caution[Nothing publishes this topic yet]
-The agent never writes to `<base>/<node>/agent/update`, so Home Assistant sees no `installed_version` or `latest_version` and cannot tell whether an update exists. Trigger updates by publishing `1` to `<base>/<node>/cmd/update` (or `POST /command/update`), which works regardless. Populating the state is a known follow-up.
-:::
+The payload is published **retained**, so the entity has a version the moment Home Assistant subscribes rather than showing unknown until the next check:
+
+```json
+{
+  "installed_version": "v1.0.3",
+  "latest_version": "v1.0.4",
+  "title": "server-status v1.0.4",
+  "release_url": "https://github.com/giovi321/server-status-go/releases/tag/v1.0.4"
+}
+```
+
+`installed_version` is the running build. `latest_version` comes from the GitHub release check, refreshed every `update.check_interval_seconds` (default 6 hours) on a goroutine separate from the publish cycle, so a slow GitHub response delays neither a publish nor the watchdog ping. Before the first successful check, `latest_version` is omitted rather than sent empty, which Home Assistant reads as "not known yet". A failed check keeps the last known value instead of blanking it.
+
+`--purge` clears this topic along with the discovery configs.
 
 ## Connection behavior
 

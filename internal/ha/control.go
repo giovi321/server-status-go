@@ -57,7 +57,7 @@ type updatePayload struct {
 }
 
 // UpdateDiscovery builds discovery for the agent's HA update entity. The state
-// topic carries a JSON object {"installed_version","latest_version"}.
+// topic carries the JSON object built by AgentUpdateState.
 func UpdateDiscovery(dev model.Device, sc config.SinkConfig) (string, []byte, error) {
 	object := dev.Node + "_agent"
 	p := updatePayload{
@@ -65,7 +65,7 @@ func UpdateDiscovery(dev model.Device, sc config.SinkConfig) (string, []byte, er
 		UniqueID:       dev.Identifier + "-agent-update",
 		ObjectID:       object,
 		HasEntityN:     true,
-		StateTopic:     sc.BaseTopic + "/" + dev.Node + "/agent/update",
+		StateTopic:     AgentUpdateTopic(sc.BaseTopic, dev.Node),
 		CommandTopic:   CommandTopic(sc.BaseTopic, dev.Node, "update"),
 		PayloadInstall: "1",
 		Availability:   AvailabilityTopic(sc.BaseTopic, dev.Node),
@@ -75,4 +75,26 @@ func UpdateDiscovery(dev model.Device, sc config.SinkConfig) (string, []byte, er
 	body, err := json.Marshal(p)
 	topic := sc.DiscoveryPrefix + "/update/" + dev.Node + "/" + object + "/config"
 	return topic, body, err
+}
+
+type agentUpdateState struct {
+	InstalledVersion string `json:"installed_version"`
+	LatestVersion    string `json:"latest_version,omitempty"`
+	Title            string `json:"title,omitempty"`
+	ReleaseURL       string `json:"release_url,omitempty"`
+}
+
+// AgentUpdateState builds the update entity's state payload. Home Assistant
+// compares installed_version against latest_version to decide whether an update
+// is offered, so both must be present for the Install action to be usable.
+//
+// An empty latest is omitted rather than sent blank: that happens only before
+// the first successful release lookup, and Home Assistant reads a missing
+// latest_version as "not known yet" instead of "no update".
+func AgentUpdateState(installed, latest, releaseURL string) ([]byte, error) {
+	s := agentUpdateState{InstalledVersion: installed, LatestVersion: latest, ReleaseURL: releaseURL}
+	if latest != "" {
+		s.Title = "server-status " + latest
+	}
+	return json.Marshal(s)
 }

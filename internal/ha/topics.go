@@ -54,6 +54,11 @@ func AttributesTopic(base, node, component, key, instance string) string {
 	return StateTopic(base, node, component, key, instance) + "/attributes"
 }
 
+// AgentUpdateTopic is the state topic of the agent's Home Assistant update entity.
+func AgentUpdateTopic(base, node string) string {
+	return base + "/" + node + "/agent/update"
+}
+
 // AvailabilityTopic is the per-host LWT topic.
 func AvailabilityTopic(base, node string) string {
 	return fmt.Sprintf("%s/%s/availability", base, node)

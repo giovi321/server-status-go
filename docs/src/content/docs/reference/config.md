@@ -70,7 +70,7 @@ update:
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `update.repo` | string | `giovi321/server-status-go` | GitHub `owner/name` the self-update pulls its latest release from |
-| `update.check_interval_seconds` | int | `21600` | Configured interval for update checks (6 hours) |
+| `update.check_interval_seconds` | int | `21600` | How often the agent resolves the latest release to populate the Home Assistant update entity (6 hours). Also a rate-limit budget: GitHub allows 60 unauthenticated API requests per hour per source address, shared by every host behind it |
 
 ## Rsnapshot
 

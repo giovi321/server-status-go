@@ -72,9 +72,13 @@ func main() {
 		return command.Result{OK: true, Message: "refresh queued"}
 	})
 	disp.Register("restart", command.RestartHandler("server-status"))
+	assetName := fmt.Sprintf("server-status-linux-%s", runtime.GOARCH)
+	checker := update.NewChecker("https://api.github.com", cfg.Update.Repo, assetName,
+		time.Duration(cfg.Update.CheckIntervalSeconds)*time.Second)
 	disp.Register("update", func(ctx context.Context) command.Result {
-		assetName := fmt.Sprintf("server-status-linux-%s", runtime.GOARCH)
-		rel, err := update.Latest(ctx, "https://api.github.com", cfg.Update.Repo, assetName)
+		// Force a lookup: pressing Install must act on the release that exists
+		// now, not on a cached answer up to check_interval_seconds old.
+		rel, err := checker.Refresh(ctx)
 		if err != nil {
 			return command.Result{OK: false, Message: "check failed: " + err.Error()}
 		}
@@ -157,6 +161,25 @@ func main() {
 		}
 	}
 
+	// publishUpdateState pushes the update entity's state to every MQTT sink. It
+	// never touches the network: it publishes whatever the checker already knows,
+	// so the entity has an installed version from the first moment rather than
+	// sitting unknown while GitHub is queried.
+	publishUpdateState := func() {
+		latest, releaseURL := "", ""
+		if rel, ok := checker.Cached(); ok {
+			latest, releaseURL = rel.Version, rel.HTMLURL
+		}
+		for _, sk := range sinks {
+			if mq, ok := sk.(*sink.MQTT); ok {
+				if err := mq.PublishAgentUpdate(version.Version, latest, releaseURL); err != nil {
+					log.Printf("agent update state: %v", err)
+				}
+			}
+		}
+	}
+	publishUpdateState()
+
 	cycle := func() {
 		snap := detect.Snapshot(ctx, dev, cols)
 		for _, sk := range sinks {
@@ -174,6 +197,25 @@ func main() {
 	if *once {
 		return
 	}
+
+	// Resolve the latest release off the cycle, so a slow GitHub response can
+	// delay neither a publish nor the watchdog ping.
+	go func() {
+		for {
+			cctx, cancel := context.WithTimeout(ctx, time.Minute)
+			if _, err := checker.Refresh(cctx); err != nil {
+				log.Printf("release check: %v", err)
+			}
+			cancel()
+			publishUpdateState()
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(checker.Interval()):
+			}
+		}
+	}()
+
 	ticker := time.NewTicker(time.Duration(*loopSecs) * time.Second)
 	defer ticker.Stop()
 	for {
