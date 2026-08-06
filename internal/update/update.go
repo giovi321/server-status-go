@@ -12,19 +12,32 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 )
 
 var applyMu sync.Mutex
 
-// Release is a resolved latest release: the tag, the asset URL, and its sha256.
+// metaClient bounds the release-metadata requests. http.DefaultClient has no
+// timeout, so a stalled connection would hang the periodic version check
+// forever and leak the goroutine behind it.
+var metaClient = &http.Client{Timeout: 30 * time.Second}
+
+// downloadClient bounds the asset download. Its ceiling is far higher than
+// metaClient's because it transfers the whole binary, not a JSON blob.
+var downloadClient = &http.Client{Timeout: 10 * time.Minute}
+
+// Release is a resolved latest release: the tag, the asset URL, its sha256, and
+// the release page, which the Home Assistant update entity links to.
 type Release struct {
 	Version  string
 	AssetURL string
 	Sha256   string
+	HTMLURL  string
 }
 
 type ghRelease struct {
 	TagName string `json:"tag_name"`
+	HTMLURL string `json:"html_url"`
 	Assets  []struct {
 		Name string `json:"name"`
 		URL  string `json:"browser_download_url"`
@@ -40,7 +53,7 @@ func Latest(ctx context.Context, apiBase, repo, assetName string) (Release, erro
 		return Release{}, err
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := metaClient.Do(req)
 	if err != nil {
 		return Release{}, err
 	}
@@ -52,7 +65,7 @@ func Latest(ctx context.Context, apiBase, repo, assetName string) (Release, erro
 	if err := json.NewDecoder(resp.Body).Decode(&gh); err != nil {
 		return Release{}, err
 	}
-	rel := Release{Version: gh.TagName}
+	rel := Release{Version: gh.TagName, HTMLURL: gh.HTMLURL}
 	var sumURL string
 	for _, a := range gh.Assets {
 		switch a.Name {
@@ -78,7 +91,7 @@ func Latest(ctx context.Context, apiBase, repo, assetName string) (Release, erro
 
 func fetchSha256(ctx context.Context, url, assetName string) (string, error) {
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := metaClient.Do(req)
 	if err != nil {
 		return "", err
 	}
@@ -104,7 +117,7 @@ func Apply(ctx context.Context, client *http.Client, rel Release, destPath strin
 	applyMu.Lock()
 	defer applyMu.Unlock()
 	if client == nil {
-		client = http.DefaultClient
+		client = downloadClient
 	}
 	if rel.Sha256 == "" {
 		return fmt.Errorf("refusing to apply update without a checksum")

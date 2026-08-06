@@ -126,6 +126,24 @@ func (m *MQTT) Publish(snap model.Snapshot) error {
 	return nil
 }
 
+// PublishAgentUpdate publishes the state of the Home Assistant update entity.
+//
+// It is retained, unlike metric state, because the entity has exactly one
+// meaningful value at a time and it changes at most once per release check.
+// Without retention Home Assistant would show the entity as unknown from every
+// restart until the next check, which is up to the configured interval away.
+func (m *MQTT) PublishAgentUpdate(installed, latest, releaseURL string) error {
+	if m.client == nil || !m.client.IsConnected() {
+		return fmt.Errorf("mqtt sink not connected; skipping agent update state for %s", m.dev.Node)
+	}
+	body, err := ha.AgentUpdateState(installed, latest, releaseURL)
+	if err != nil {
+		return err
+	}
+	m.client.Publish(ha.AgentUpdateTopic(m.sc.BaseTopic, m.dev.Node), byte(m.sc.QoS), true, body)
+	return nil
+}
+
 // publishControlDiscoveryOnce publishes the command button and update entity
 // discovery, once per connection, guarded by the same discovered map used for
 // metric discovery (synthetic keys so they never collide with metric keys).
@@ -219,7 +237,11 @@ func (m *MQTT) Purge(snap model.Snapshot) error {
 		}
 	}
 
-	// 3) Availability last, then graceful disconnect (no LWT republish).
+	// 3) The update entity's state is retained too, so clear it or it outlives
+	//    the device it described.
+	clear(ha.AgentUpdateTopic(m.sc.BaseTopic, m.dev.Node))
+
+	// 4) Availability last, then graceful disconnect (no LWT republish).
 	clear(m.availTopic)
 	m.client.Disconnect(250)
 	return nil

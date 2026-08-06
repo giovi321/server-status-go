@@ -39,7 +39,7 @@ On connect the agent publishes discovery for, on the host device:
 
 Pressing a button publishes `1` to the matching command topic. These entities are created whenever an MQTT sink is present; there is no separate switch to enable them.
 
-The two buttons work as described. The update entity is only half wired: its command side is connected, but the agent never publishes its state topic, so Home Assistant shows no installed or latest version and cannot indicate that an update is available. Publish to the `update` command topic instead. See [Self-update](../self-update/).
+The update entity carries a real state: the agent publishes the installed version and the latest release it can see, so Home Assistant marks the host as having an update available and enables Install by itself. See [Self-update](../self-update/).
 
 :::note[restart and update need privilege]
 Both shell out to `systemctl`. The bundled systemd unit runs as `root`, so they work out of the box. If you run the agent as a non-root user, it must be allowed to restart its own service.

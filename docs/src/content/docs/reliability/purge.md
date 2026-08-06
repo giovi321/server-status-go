@@ -15,12 +15,13 @@ The uninstaller runs this automatically; see [Installation → Uninstall](../../
 
 1. **Sweep**. Subscribe to the wildcard `<discovery_prefix>/+/<node>/+/config`, which matches the host device and every sub-device's discovery topics regardless of entity domain. Wait briefly for the broker to deliver the retained configs, collect every topic that arrives with a non-empty payload, then clear each one with an empty retained payload. Because this reads what is actually retained on the broker, it also clears **orphans**: entities from earlier cycles that are no longer in the current snapshot, such as an unplugged disk or a removed container
 2. **Belt-and-suspenders**. Also explicitly clear the discovery topics for every metric in the current snapshot plus the three control entities (the two buttons and the update entity), in case the retained delivery in step 1 was slow or incomplete
-3. **Availability**. Clear the availability topic
-4. **Graceful disconnect**. Disconnect cleanly so the MQTT last-will does not fire, which would otherwise republish a retained `offline` onto the availability topic that was just cleared
+3. **Update entity state**. Clear the retained `<base>/<node>/agent/update` topic, which would otherwise outlive the device it described
+4. **Availability**. Clear the availability topic
+5. **Graceful disconnect**. Disconnect cleanly so the MQTT last-will does not fire, which would otherwise republish a retained `offline` onto the availability topic that was just cleared
 
 The result: Home Assistant removes the device and all of its entities.
 
-`--purge` clears the discovery configs and the availability topic. It does not clear retained **state** or **attribute** topics, which only exist when the sink runs with `retain: true` (the default is `false`, in which case there is nothing left behind). Those topics create no Home Assistant entities on their own, so the device still disappears; clear them by hand if you want the broker completely empty for that node:
+`--purge` clears the discovery configs, the update entity's state, and the availability topic. It does not clear retained metric **state** or **attribute** topics, which only exist when the sink runs with `retain: true` (the default is `false`, in which case there is nothing left behind). Those topics create no Home Assistant entities on their own, so the device still disappears; clear them by hand if you want the broker completely empty for that node:
 
 ```bash
 mosquitto_sub -h <broker> -t 'server-status/<node>/#' -v --retained-only

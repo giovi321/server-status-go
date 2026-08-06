@@ -9,13 +9,17 @@ The agent can replace its own binary with the latest GitHub release, verify the 
 
 Any of these runs the `update` command:
 
+- Press **Install** on the host's **Agent** update entity in Home Assistant
 - Publish `1` to `server-status/<node>/cmd/update`
 - `POST /command/update` on the [HTTP control API](../http/)
-- The Install action on the host's **Agent** update entity in Home Assistant
 
-:::note[Prefer the command topic]
-The agent does not publish the update entity's state topic, so Home Assistant has no `installed_version` or `latest_version` for it and cannot show that an update is available. The command topic and the HTTP endpoint are unaffected. See [MQTT topics](../../reference/topics/#agent-update-entity).
-:::
+## Knowing an update exists
+
+The agent publishes the update entity's state (`installed_version`, `latest_version`, and a link to the release), so Home Assistant shows the host as having an update available and enables Install on its own. That check runs every `update.check_interval_seconds` (default 6 hours) on a background goroutine, independent of the publish cycle.
+
+The interval is also a rate-limit budget. GitHub allows 60 unauthenticated API requests per hour per source address, and a fleet behind one address shares it. At the default a host spends four requests a day, so even a large fleet stays well inside the limit. Lower it with care.
+
+Pressing Install does not trust that cached answer: the `update` command always re-resolves the latest release before doing anything, so it acts on what exists now.
 
 ## What happens
 
