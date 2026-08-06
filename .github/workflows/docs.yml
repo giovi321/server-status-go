@@ -40,6 +40,11 @@ jobs:
       - name: Build Starlight site
         run: npm run build
 
+      # Stamp the build so the deploy job can prove the live site is serving
+      # THIS commit, rather than trusting the Pages status API to say so.
+      - name: Stamp commit
+        run: echo "${GITHUB_SHA}" > dist/commit.txt
+
       - uses: actions/configure-pages@v6
         with:
           enablement: true
@@ -55,5 +60,36 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      # actions/deploy-pages decides success by polling the Pages status API. That
+      # API can lag well past the action's timeout while the deployment itself
+      # lands fine, which reports a failure for a deploy that worked (GitHub's
+      # "Pages - Deployment Lag" incident on 2026-08-06 did exactly that: three
+      # consecutive red runs, all three actually live). Let the step report what
+      # it likes; the verify step below is the real gate.
       - id: deployment
+        continue-on-error: true
         uses: actions/deploy-pages@v5
+
+      # The truth is what the site serves. Poll for the commit stamp written at
+      # build time and pass only when the live site is on this commit, so a genuine
+      # failure to deploy is still caught.
+      - name: Verify the live site serves this commit
+        env:
+          # page_url is empty when the deploy step aborted, so fall back to the
+          # canonical Pages URL, derived rather than hardcoded.
+          URL: ${{ steps.deployment.outputs.page_url || format('https://{0}.github.io/{1}/', github.repository_owner, github.event.repository.name) }}
+        run: |
+          stamp="${URL%/}/commit.txt"
+          echo "Expecting ${GITHUB_SHA} at ${stamp}"
+          for attempt in $(seq 1 40); do
+            # Query string busts the Pages CDN cache; the file itself ignores it.
+            live=$(curl -fsSL --max-time 20 "${stamp}?r=${GITHUB_RUN_ID}-${attempt}" 2>/dev/null | tr -d '[:space:]' || true)
+            if [ "${live}" = "${GITHUB_SHA}" ]; then
+              echo "Live after ${attempt} attempt(s)."
+              exit 0
+            fi
+            echo "attempt ${attempt}: serving '${live:-<nothing>}'"
+            sleep 15
+          done
+          echo "::error::Site never served ${GITHUB_SHA} within 10 minutes; the deployment really did fail."
+          exit 1
