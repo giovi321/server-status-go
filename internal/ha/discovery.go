@@ -19,6 +19,7 @@ type deviceBlock struct {
 type discoveryPayload struct {
 	Name              string      `json:"name"`
 	StateTopic        string      `json:"state_topic"`
+	AttributesTopic   string      `json:"json_attributes_topic,omitempty"`
 	UniqueID          string      `json:"unique_id"`
 	ObjectID          string      `json:"object_id"`
 	HasEntityName     bool        `json:"has_entity_name"`
@@ -72,6 +73,11 @@ func Discovery(dev model.Device, m model.Metric, sc config.SinkConfig) (string, 
 		if dev.Parent != "" {
 			p.Device.ViaDevice = "server-status-" + dev.Parent
 		}
+	}
+	if len(m.Attributes) > 0 {
+		// The sink publishes a JSON object here, which is what Home Assistant
+		// expects, so no json_attributes_template is needed to reshape it.
+		p.AttributesTopic = AttributesTopic(sc.BaseTopic, dev.Node, m.Component, m.Key, m.Instance)
 	}
 	if m.Category == "diagnostic" {
 		p.EntityCategory = "diagnostic"

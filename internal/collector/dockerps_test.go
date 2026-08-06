@@ -1,8 +1,11 @@
 package collector
 
 import (
+	"encoding/json"
+	"fmt"
 	"testing"
 
+	"github.com/giovi321/server-status/internal/ha"
 	"github.com/giovi321/server-status/internal/model"
 )
 
@@ -60,5 +63,75 @@ func TestDockerMetrics(t *testing.T) {
 	}
 	if by["docker_running"].Component != "docker" || by["docker_running"].ComponentName != "Docker" {
 		t.Fatalf("sub-device: %+v", by["docker_running"])
+	}
+}
+
+// docker_containers used to publish the whole JSON inventory as its state, which
+// Home Assistant rejects past 255 characters. The state is now the count and the
+// inventory moved to attributes; the key and sub-device must not move with it,
+// or every existing sensor.<host>_docker_containers reference breaks.
+func TestDockerContainersStateIsCountAndInventoryIsAttributes(t *testing.T) {
+	cs := parseDockerPS(dockerPSOut)
+	var m model.Metric
+	for _, x := range dockerMetrics(cs, map[string]bool{"nginx:latest": true}) {
+		if x.Key == "docker_containers" {
+			m = x
+		}
+	}
+	if m.Key == "" {
+		t.Fatal("docker_containers metric missing")
+	}
+	if m.Component != "docker" || m.ComponentName != "Docker" || m.Name != "Containers" {
+		t.Fatalf("identity moved: %+v", m)
+	}
+	if m.Value != len(cs) {
+		t.Fatalf("state should be the container count, got %v", m.Value)
+	}
+	if got := ha.StateValue(m); len([]rune(got)) > ha.MaxStateLength {
+		t.Fatalf("state is %d chars, over Home Assistant's limit", len([]rune(got)))
+	}
+	reports, ok := m.Attributes["containers"].([]containerReport)
+	if !ok || len(reports) != len(cs) {
+		t.Fatalf("attributes must carry every container: %#v", m.Attributes)
+	}
+	// The per-container health and update flags exist nowhere else.
+	var db, nginx containerReport
+	for _, r := range reports {
+		switch r.Name {
+		case "web-db-1":
+			db = r
+		case "web-nginx-1":
+			nginx = r
+		}
+	}
+	if db.Health != "unhealthy" {
+		t.Fatalf("unhealthy flag lost: %+v", db)
+	}
+	if !nginx.Update {
+		t.Fatalf("update flag lost: %+v", nginx)
+	}
+}
+
+// A busy host is where the 255-character limit used to bite.
+func TestDockerContainersStateFitsWithManyContainers(t *testing.T) {
+	cs := make([]ContainerInfo, 300)
+	for i := range cs {
+		cs[i] = ContainerInfo{Name: fmt.Sprintf("service-with-a-long-name-%03d", i), Image: "ghcr.io/example/some-image:1.2.3", State: "running", Health: "healthy", Project: "stack"}
+	}
+	var m model.Metric
+	for _, x := range dockerMetrics(cs, nil) {
+		if x.Key == "docker_containers" {
+			m = x
+		}
+	}
+	if got := ha.StateValue(m); len([]rune(got)) > ha.MaxStateLength {
+		t.Fatalf("state is %d chars, over Home Assistant's limit", len([]rune(got)))
+	}
+	b, err := json.Marshal(m.Attributes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(b) > ha.MaxAttributesBytes {
+		t.Fatalf("attributes %d bytes exceed the %d-byte recorder cap", len(b), ha.MaxAttributesBytes)
 	}
 }

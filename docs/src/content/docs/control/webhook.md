@@ -60,7 +60,31 @@ MQTT and webhook can be configured together; both receive every cycle's snapshot
 }
 ```
 
-Each metric carries the same fields the MQTT discovery is built from: `key`, `component` and `component_name` (for sub-devices), `instance` (for multi-instance metrics), `name`, `value`, `unit`, `device_class`, `state_class`, `kind`, `category`, and `icon`. Absent fields are omitted. See the [Metrics reference](../../metrics/reference/) for the full catalog.
+Each metric carries the same fields the MQTT discovery is built from: `key`, `component` and `component_name` (for sub-devices), `instance` (for multi-instance metrics), `name`, `value`, `unit`, `device_class`, `state_class`, `kind`, `category`, `icon`, and `attributes`. Absent fields are omitted. See the [Metrics reference](../../metrics/reference/) for the full catalog.
+
+`attributes` is a JSON object carrying detail that does not fit a Home Assistant state, such as the `docker_containers` inventory:
+
+```json
+{
+  "key": "docker_containers",
+  "component": "docker",
+  "component_name": "Docker",
+  "name": "Containers",
+  "value": 12,
+  "state_class": "measurement",
+  "kind": "sensor",
+  "category": "diagnostic",
+  "icon": "mdi:docker",
+  "attributes": {
+    "containers": [
+      {"name": "metube", "image": "ghcr.io/alexta69/metube", "state": "running", "health": "unhealthy"},
+      {"name": "sonarr", "image": "lscr.io/linuxserver/sonarr", "state": "running", "health": "healthy", "project": "media", "update": true}
+    ]
+  }
+}
+```
+
+Unlike the MQTT state, webhook values are never clipped to 255 characters — that limit is Home Assistant's, not the sink's.
 
 ## Delivery
 

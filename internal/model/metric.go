@@ -27,6 +27,10 @@ type Metric struct {
 	Kind          Kind   `json:"kind"`
 	Category      string `json:"category,omitempty"` // "primary" or "diagnostic"
 	Icon          string `json:"icon,omitempty"`
+	// Attributes carries detail too large to be a state. Home Assistant caps a
+	// state at 255 characters and discards longer updates outright, but places
+	// no such limit on attributes, so inventories and lists ride here instead.
+	Attributes map[string]any `json:"attributes,omitempty"`
 }
 
 // IsHost reports whether the metric attaches to the host device rather than a sub-device.
