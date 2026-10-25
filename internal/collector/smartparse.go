@@ -48,6 +48,12 @@ type smartRaw struct {
 	Temperature *struct {
 		Current int `json:"current"`
 	} `json:"temperature"`
+	// power_on_time is smartctl's own decoding of attribute 9. Several vendors
+	// (Seagate, some WD) pack minutes or milliseconds into the upper bytes of the
+	// raw value, so raw.value is not hours on those drives.
+	PowerOnTime *struct {
+		Hours int64 `json:"hours"`
+	} `json:"power_on_time"`
 	ATA *struct {
 		Table []struct {
 			ID  int `json:"id"`
@@ -104,6 +110,9 @@ func parseSmartctl(data []byte) (SmartInfo, error) {
 				si.CRCErrors = i64(a.Raw.Value)
 			}
 		}
+	}
+	if r.PowerOnTime != nil {
+		si.PowerOnHours = i64(r.PowerOnTime.Hours)
 	}
 	if r.NVMe != nil {
 		si.PercentageUsed = r.NVMe.PercentageUsed

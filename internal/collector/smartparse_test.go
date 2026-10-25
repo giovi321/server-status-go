@@ -74,6 +74,28 @@ func TestParseSmartctlATA(t *testing.T) {
 	}
 }
 
+// Seagate IronWolf: raw attribute 9 packs milliseconds into the upper bytes,
+// so only smartctl's decoded power_on_time.hours is meaningful.
+const smartctlSeagate = `{
+  "model_name": "ST4000VN008-2DR166",
+  "serial_number": "ZGY9PPVW",
+  "smart_status": {"passed": true},
+  "power_on_time": {"hours": 42319, "minutes": 12},
+  "ata_smart_attributes": {"table": [
+    {"id": 9, "name": "Power_On_Hours", "raw": {"value": 270225027469, "string": "42319 (87 255 0)"}}
+  ]}
+}`
+
+func TestParseSmartctlSeagatePowerOnHours(t *testing.T) {
+	si, err := parseSmartctl([]byte(smartctlSeagate))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if si.PowerOnHours == nil || *si.PowerOnHours != 42319 {
+		t.Fatalf("poh: %v", si.PowerOnHours)
+	}
+}
+
 func TestParseSmartctlNVMe(t *testing.T) {
 	si, err := parseSmartctl([]byte(smartctlNVMe))
 	if err != nil {
