@@ -1,6 +1,7 @@
 package collector
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -57,7 +58,7 @@ const rsnapLogBadStamp = `[garbage] /usr/bin/rsnapshot -c /etc/rsnapshot.conf ho
 `
 
 func logTime(day, h, m, s int) time.Time {
-	return time.Date(2026, time.July, day, h, m, s, 0, time.UTC)
+	return time.Date(2026, time.July, day, h, m, s, 0, time.Local)
 }
 
 func TestClassifyRsnapshotLog(t *testing.T) {
@@ -97,7 +98,7 @@ func TestClassifyRsnapshotLog(t *testing.T) {
 		}},
 	}
 	for _, c := range cases {
-		got := classifyRsnapshotLog(c.tail)
+		got := classifyRsnapshotLog(c.tail, "/etc/rsnapshot.conf")
 		if got.LastInterval != c.want.LastInterval || got.LastResult != c.want.LastResult || got.BenignOnly != c.want.BenignOnly {
 			t.Fatalf("%s: got %+v want %+v", c.name, got, c.want)
 		}
@@ -114,8 +115,79 @@ func TestClassifyRsnapshotLogErrorOverridesBanner(t *testing.T) {
 [10/Jul/2026:05:21:14] ERROR: /bin/cp failed
 [10/Jul/2026:05:25:02] /usr/bin/rsnapshot -c /etc/rsnapshot.conf daysago: completed successfully
 `
-	got := classifyRsnapshotLog(tail)
+	got := classifyRsnapshotLog(tail, "/etc/rsnapshot.conf")
 	if got.LastResult != "errors" {
 		t.Fatalf("result=%q, want errors", got.LastResult)
+	}
+}
+
+// The shared GC03SRVR log after the 2026-10-31 split: groups a, b and c write
+// one file with ISO banner timestamps. c fails, then a succeeds.
+const rsnapLogShared = `[2026-10-31T02:05:00] /usr/bin/rsnapshot -c /etc/rsnapshot-b.conf daysago: started
+[2026-10-31T02:05:00] echo 1500001 > /var/run/rsnapshot-b.pid
+[2026-10-31T02:05:40] /usr/bin/rsnapshot -c /etc/rsnapshot-b.conf daysago: completed successfully
+[2026-10-31T02:10:00] /usr/bin/rsnapshot -c /etc/rsnapshot-c.conf daysago: started
+[2026-10-31T02:10:00] echo 1500002 > /var/run/rsnapshot-c.pid
+[2026-10-31T02:11:30] ERROR: /usr/bin/rsync returned 23 while processing /media/storage1/backup/GC01PC_home/
+[2026-10-31T02:12:00] /usr/bin/rsnapshot -c /etc/rsnapshot-c.conf daysago: completed, but with some errors
+[2026-10-31T04:00:17] /usr/bin/rsnapshot -c /etc/rsnapshot-a.conf hoursago: started
+[2026-10-31T04:00:17] echo 1641657 > /var/run/rsnapshot-a.pid
+[2026-10-31T04:19:37] /usr/bin/rsnapshot -c /etc/rsnapshot-a.conf hoursago: completed successfully
+`
+
+func TestClassifyRsnapshotLogPerConfig(t *testing.T) {
+	c := classifyRsnapshotLog(rsnapLogShared, "/etc/rsnapshot-c.conf")
+	if c.LastResult != "errors" || c.LastInterval != "daysago" {
+		t.Fatalf("c: %+v", c)
+	}
+	a := classifyRsnapshotLog(rsnapLogShared, "/etc/rsnapshot-a.conf")
+	if a.LastResult != "success" || a.LastInterval != "hoursago" {
+		t.Fatalf("a: %+v", a)
+	}
+	if want := time.Date(2026, 10, 31, 4, 0, 17, 0, time.Local); !a.LastStart.Equal(want) {
+		t.Fatalf("a start %v", a.LastStart)
+	}
+	if want := time.Date(2026, 10, 31, 2, 12, 0, 0, time.Local); !c.LastActivity.Equal(want) {
+		t.Fatalf("c activity %v", c.LastActivity)
+	}
+	if b := classifyRsnapshotLog(rsnapLogShared, "/etc/rsnapshot-b.conf"); b.LastResult != "success" || b.LastInterval != "daysago" {
+		t.Fatalf("b: %+v", b)
+	}
+	if d := classifyRsnapshotLog(rsnapLogShared, "/etc/rsnapshot-vm.conf"); d.LastResult != "unknown" {
+		t.Fatalf("vm: %+v", d)
+	}
+}
+
+// A banner without -c is rsnapshot's default config and nobody else's.
+func TestClassifyRsnapshotLogNoConfFlag(t *testing.T) {
+	tail := `[2026-10-31T01:00:00] /usr/bin/rsnapshot hoursago: started
+[2026-10-31T01:05:00] /usr/bin/rsnapshot hoursago: completed successfully
+`
+	if got := classifyRsnapshotLog(tail, "/etc/rsnapshot.conf"); got.LastResult != "success" {
+		t.Fatalf("default conf: %+v", got)
+	}
+	if got := classifyRsnapshotLog(tail, "/etc/rsnapshot-a.conf"); got.LastResult != "unknown" {
+		t.Fatalf("other conf credited: %+v", got)
+	}
+}
+
+// Old-format lines from before an rsnapshot upgrade, then ISO lines: both
+// parse and the later block wins.
+func TestClassifyRsnapshotLogMixedFormats(t *testing.T) {
+	tail := `[30/Oct/2026:22:00:01] /usr/bin/rsnapshot -c /etc/rsnapshot-a.conf hoursago: started
+[30/Oct/2026:22:01:00] /usr/bin/rsnapshot -c /etc/rsnapshot-a.conf hoursago: completed, but with some errors
+[2026-10-31T00:00:17] /usr/bin/rsnapshot -c /etc/rsnapshot-a.conf hoursago: started
+[2026-10-31T00:01:34] /usr/bin/rsnapshot -c /etc/rsnapshot-a.conf hoursago: completed successfully
+`
+	got := classifyRsnapshotLog(tail, "/etc/rsnapshot-a.conf")
+	if got.LastResult != "success" {
+		t.Fatalf("result %+v", got)
+	}
+	if want := time.Date(2026, 10, 31, 0, 1, 34, 0, time.Local); !got.LastEnd.Equal(want) {
+		t.Fatalf("end %v", got.LastEnd)
+	}
+	old := classifyRsnapshotLog(tail[:strings.Index(tail, "[2026-")], "/etc/rsnapshot-a.conf")
+	if want := time.Date(2026, 10, 30, 22, 0, 1, 0, time.Local); !old.LastStart.Equal(want) {
+		t.Fatalf("old start %v", old.LastStart)
 	}
 }

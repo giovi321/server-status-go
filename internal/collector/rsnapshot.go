@@ -185,8 +185,9 @@ func (r *Rsnapshot) Collect(ctx context.Context) ([]model.Metric, error) {
 	return out, nil
 }
 
-// rsnapLogTailBytes bounds the log read; only the last run's banners matter.
-const rsnapLogTailBytes = 256 * 1024
+// rsnapLogTailBytes bounds the log read. Several configs can share the file,
+// so it must still hold a daily config's last run after a day of the others.
+const rsnapLogTailBytes = 1 << 20
 
 // gatherRsnapshot reads the on-host evidence for one config: conf, log tail,
 // lockfile, interval directories, mount state, strays, and cron attribution.
@@ -202,10 +203,12 @@ func (r *Rsnapshot) gatherRsnapshot(t rsnapTarget, others []string, cron []cronE
 	// lock is taken and no log is written, so nothing must be read for them
 	// (a guessed path would attribute another config's evidence to this one).
 	if in.Conf.Logfile != "" {
-		if tail, mtime, ok := readFileTail(in.Conf.Logfile, rsnapLogTailBytes); ok {
+		if tail, _, ok := readFileTail(in.Conf.Logfile, rsnapLogTailBytes); ok {
 			in.LogReadable = true
-			in.Log = classifyRsnapshotLog(tail)
-			in.LogMtime = mtime
+			in.Log = classifyRsnapshotLog(tail, t.Path)
+			// Configs can share a log file, so its mtime is no evidence for
+			// this one: use the newest line of this config's own last block.
+			in.LogMtime = in.Log.LastActivity
 		}
 	} else {
 		in.LogReadable = true // no logfile configured: no log evidence expected

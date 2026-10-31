@@ -15,10 +15,15 @@ type rsnapLogState struct {
 	BenignOnly   bool
 	LastStart    time.Time
 	LastEnd      time.Time
+	// LastActivity is the newest timestamp inside that block. Groups share one
+	// log file, so the file's mtime says nothing about this config.
+	LastActivity time.Time
 }
 
-// rsnapLogTimeLayout matches the [10/Jul/2026:05:20:01] banner timestamps.
-const rsnapLogTimeLayout = "02/Jan/2006:15:04:05"
+// rsnapLogTimeLayouts are the banner timestamp forms: [2026-10-31T04:19:37]
+// from rsnapshot 1.5.x, [10/Jul/2026:05:20:01] from older releases. Banners
+// carry no zone, so they are read in the host's local zone.
+var rsnapLogTimeLayouts = []string{"2006-01-02T15:04:05", "02/Jan/2006:15:04:05"}
 
 // rsnapCompletions maps completion banner suffixes to results, most common first.
 var rsnapCompletions = []struct{ suffix, result string }{
@@ -30,6 +35,7 @@ var rsnapCompletions = []struct{ suffix, result string }{
 // rsnapLogBlock is one run block: opened by a "<interval>: started" banner,
 // closed by a completion banner for the same interval.
 type rsnapLogBlock struct {
+	conf       string
 	interval   string
 	start      time.Time
 	end        time.Time
@@ -38,6 +44,22 @@ type rsnapLogBlock struct {
 	hasError   bool
 	warnTotal  int
 	warnBenign int
+	lastSeen   time.Time
+}
+
+// rsnapDefaultConf is the config rsnapshot uses when it is run without -c.
+const rsnapDefaultConf = "/etc/rsnapshot.conf"
+
+// rsnapBannerConf returns the config path a banner names with -c, or
+// rsnapshot's default config when it names none.
+func rsnapBannerConf(content string) string {
+	f := strings.Fields(content)
+	for i := 0; i+1 < len(f); i++ {
+		if f[i] == "-c" {
+			return f[i+1]
+		}
+	}
+	return rsnapDefaultConf
 }
 
 // rsnapLogLine splits a log line into its banner timestamp (zero when absent
@@ -46,8 +68,10 @@ func rsnapLogLine(line string) (time.Time, string) {
 	if strings.HasPrefix(line, "[") {
 		if i := strings.Index(line, "]"); i > 0 {
 			rest := strings.TrimSpace(line[i+1:])
-			if ts, err := time.Parse(rsnapLogTimeLayout, line[1:i]); err == nil {
-				return ts, rest
+			for _, layout := range rsnapLogTimeLayouts {
+				if ts, err := time.ParseInLocation(layout, line[1:i], time.Local); err == nil {
+					return ts, rest
+				}
 			}
 			return time.Time{}, rest
 		}
@@ -62,12 +86,16 @@ func rsnapBenignWarning(content string) bool {
 	return strings.Contains(l, "vanished") || strings.Contains(l, "code 24")
 }
 
-// classifyRsnapshotLog classifies the tail of an rsnapshot log. The tail may
-// start mid-line: a partial first line (no leading "[") is dropped. The state
-// reported is that of the last block whose started banner appears in the tail;
-// no completion banner for it means "incomplete", no started banner at all
-// means "unknown".
-func classifyRsnapshotLog(tail string) rsnapLogState {
+// classifyRsnapshotLog classifies the tail of an rsnapshot log for one config.
+// The tail may start mid-line: a partial first line (no leading "[") is
+// dropped. Several configs may share one log file, so blocks are attributed to
+// the config their started banner names with -c (no -c means the default
+// config), and the state reported is that of the last block for confPath whose
+// started banner appears in the tail. Other lines belong to the newest open
+// block of any config: runs on these hosts are serialised by a shared flock,
+// so blocks never interleave across configs. No completion banner means
+// "incomplete", no started banner for confPath at all means "unknown".
+func classifyRsnapshotLog(tail, confPath string) rsnapLogState {
 	if tail != "" && !strings.HasPrefix(tail, "[") {
 		if i := strings.Index(tail, "\n"); i >= 0 {
 			tail = tail[i+1:]
@@ -84,6 +112,11 @@ func classifyRsnapshotLog(tail string) rsnapLogState {
 		}
 		return nil
 	}
+	seen := func(b *rsnapLogBlock, ts time.Time) {
+		if b != nil && ts.After(b.lastSeen) {
+			b.lastSeen = ts
+		}
+	}
 	for _, raw := range strings.Split(tail, "\n") {
 		line := strings.TrimSpace(raw)
 		if line == "" {
@@ -91,9 +124,10 @@ func classifyRsnapshotLog(tail string) rsnapLogState {
 		}
 		ts, content := rsnapLogLine(line)
 		if strings.HasSuffix(content, ": started") {
-			f := strings.Fields(strings.TrimSuffix(content, ": started"))
+			head := strings.TrimSuffix(content, ": started")
+			f := strings.Fields(head)
 			if len(f) > 0 {
-				blocks = append(blocks, &rsnapLogBlock{interval: f[len(f)-1], start: ts})
+				blocks = append(blocks, &rsnapLogBlock{conf: rsnapBannerConf(head), interval: f[len(f)-1], start: ts, lastSeen: ts})
 			}
 			continue
 		}
@@ -103,16 +137,19 @@ func classifyRsnapshotLog(tail string) rsnapLogState {
 				continue
 			}
 			completed = true
-			f := strings.Fields(strings.TrimSuffix(content, c.suffix))
+			head := strings.TrimSuffix(content, c.suffix)
+			f := strings.Fields(head)
 			if len(f) == 0 {
 				break
 			}
-			// Close the most recent open block for this interval. Orphan
-			// completions (start scrolled out of the tail) are ignored.
+			// Close the most recent open block for this config and interval.
+			// Orphan completions (start scrolled out of the tail) are ignored.
+			conf := rsnapBannerConf(head)
 			for i := len(blocks) - 1; i >= 0; i-- {
 				b := blocks[i]
-				if !b.closed && b.interval == f[len(f)-1] {
+				if !b.closed && b.conf == conf && b.interval == f[len(f)-1] {
 					b.closed, b.result, b.end = true, c.result, ts
+					seen(b, ts)
 					break
 				}
 			}
@@ -121,14 +158,16 @@ func classifyRsnapshotLog(tail string) rsnapLogState {
 		if completed {
 			continue
 		}
+		b := lastOpen()
+		seen(b, ts)
 		if strings.Contains(content, "ERROR:") {
-			if b := lastOpen(); b != nil {
+			if b != nil {
 				b.hasError = true
 			}
 			continue
 		}
 		if strings.Contains(content, "WARNING") {
-			if b := lastOpen(); b != nil {
+			if b != nil {
 				b.warnTotal++
 				if rsnapBenignWarning(content) {
 					b.warnBenign++
@@ -136,13 +175,20 @@ func classifyRsnapshotLog(tail string) rsnapLogState {
 			}
 		}
 	}
-	if len(blocks) == 0 {
+	var b *rsnapLogBlock
+	for i := len(blocks) - 1; i >= 0; i-- {
+		if blocks[i].conf == confPath {
+			b = blocks[i]
+			break
+		}
+	}
+	if b == nil {
 		return rsnapLogState{LastResult: "unknown"}
 	}
-	b := blocks[len(blocks)-1]
 	st := rsnapLogState{
 		LastInterval: b.interval,
 		LastStart:    b.start,
+		LastActivity: b.lastSeen,
 		BenignOnly:   b.warnTotal > 0 && b.warnBenign == b.warnTotal,
 	}
 	switch {
