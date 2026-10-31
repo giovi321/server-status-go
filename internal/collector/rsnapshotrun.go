@@ -70,10 +70,10 @@ func readRsnapRuns(dir, name string) (last, lastSync *rsnapRun) {
 }
 
 // rsnapshotRunMetrics publishes the last run and the last good sync on the
-// config's device. When the log holds a newer run than the state file (the
-// wrapper was bypassed, or the state write failed), the last run time and
-// interval come from the log and the state file's exit code and duration are
-// not claimed for it.
+// config's device. When the log holds a newer completed run than the state
+// file (the wrapper was bypassed, or the state write failed), the last run
+// time and interval come from the log and the state file's exit code and
+// duration are not claimed for it.
 func rsnapshotRunMetrics(component, componentName string, last, lastSync *rsnapRun, log rsnapLogState) []model.Metric {
 	var out []model.Metric
 	metric := func(key, leaf string, val any, unit, devClass, stateClass, category, icon string, kind model.Kind) {
@@ -82,10 +82,10 @@ func rsnapshotRunMetrics(component, componentName string, last, lastSync *rsnapR
 	}
 	stamp := func(t time.Time) string { return t.UTC().Format(time.RFC3339) }
 
+	// Only a completed log block can take over: during a run in progress the
+	// entities keep describing the last completed run, so its time, exit code
+	// and duration stay paired (MQTT keeps a metric that stops being sent).
 	logEnd := log.LastEnd
-	if logEnd.IsZero() {
-		logEnd = log.LastStart
-	}
 	switch {
 	case !logEnd.IsZero() && (last == nil || logEnd.After(last.End)):
 		metric("rsnapshot_last_run", "Last run", stamp(logEnd), "", "timestamp", "", "primary", "", model.KindSensor)
