@@ -32,6 +32,7 @@ type Rsnapshot struct {
 	cfg        config.Config
 	stuckAfter time.Duration
 	margin     time.Duration
+	stateDir   string // per-run state files from the wrapper, see rsnapshotrun.go
 }
 
 func NewRsnapshot(cfg config.Config) *Rsnapshot {
@@ -39,6 +40,7 @@ func NewRsnapshot(cfg config.Config) *Rsnapshot {
 		cfg:        cfg,
 		stuckAfter: rsnapDuration(cfg.Rsnapshot.StuckAfter, 12*time.Hour),
 		margin:     rsnapDuration(cfg.Rsnapshot.Margin, 8*time.Hour),
+		stateDir:   rsnapStateDir,
 	}
 }
 
@@ -181,6 +183,8 @@ func (r *Rsnapshot) Collect(ctx context.Context) ([]model.Metric, error) {
 		compName := "Rsnapshot " + t.Name
 		out = append(out, rsnapshotMetrics(comp, compName, st)...)
 		out = append(out, model.Metric{Key: "rsnapshot_stray_items", Component: comp, ComponentName: compName, Name: "Stray items", Value: in.StrayCount, StateClass: "measurement", Kind: model.KindSensor, Category: "diagnostic", Icon: "mdi:file-alert-outline"})
+		last, lastSync := readRsnapRuns(r.stateDir, strings.TrimSuffix(filepath.Base(t.Path), ".conf"))
+		out = append(out, rsnapshotRunMetrics(comp, compName, last, lastSync, in.Log)...)
 	}
 	return out, nil
 }
