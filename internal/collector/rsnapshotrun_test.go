@@ -111,6 +111,22 @@ func TestRsnapshotRunMetricsLogNewer(t *testing.T) {
 	}
 }
 
+// A run still in progress (started, no completion banner) must not take over
+// the last run entities: they keep describing the last completed run, so its
+// time, exit code and duration stay paired.
+func TestRsnapshotRunMetricsRunInProgress(t *testing.T) {
+	start := time.Date(2026, 10, 31, 8, 0, 17, 0, time.UTC)
+	last := &rsnapRun{Interval: "hoursago", Start: start, End: start.Add(77 * time.Second), ExitCode: 2, Synced: true}
+	log := rsnapLogState{LastInterval: "daysago", LastStart: start.Add(time.Hour), LastResult: "incomplete"}
+	ms := rsnapshotRunMetrics("rsnapshot-a", "Rsnapshot a", last, nil, log)
+	if m, _ := runMetric(t, ms, "rsnapshot_last_run"); m.Value != "2026-10-31T08:01:34Z" {
+		t.Fatalf("last run %#v", m.Value)
+	}
+	if m, ok := runMetric(t, ms, "rsnapshot_last_exit_code"); !ok || m.Value != 2 {
+		t.Fatalf("exit code %#v %v", m.Value, ok)
+	}
+}
+
 func TestRsnapshotRunMetricsNone(t *testing.T) {
 	if ms := rsnapshotRunMetrics("rsnapshot-a", "Rsnapshot a", nil, nil, rsnapLogState{}); len(ms) != 0 {
 		t.Fatalf("got %d metrics", len(ms))
