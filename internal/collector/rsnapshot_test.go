@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -180,6 +181,34 @@ func TestGatherRsnapshotOmittedLogfileLockfile(t *testing.T) {
 	}
 	if in.Lock != (rsnapLockState{}) {
 		t.Fatalf("lock evidence read from nowhere: %+v", in.Lock)
+	}
+}
+
+// Groups share one log file: a config's evidence comes from its own blocks
+// only, and its activity time from its own last line, not the file mtime.
+func TestGatherRsnapshotSharedLog(t *testing.T) {
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "rsnapshot.log")
+	if err := os.WriteFile(logPath, []byte(rsnapLogShared), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	confPath := filepath.Join(dir, "rsnapshot-c.conf")
+	conf := "snapshot_root\t" + filepath.Join(dir, "snap") + "\nretain\tdaysago\t7\nlogfile\t" + logPath + "\n"
+	if err := os.WriteFile(confPath, []byte(conf), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// rsnapLogShared names /etc/rsnapshot-c.conf; point the banners at the temp conf.
+	shared := strings.ReplaceAll(rsnapLogShared, "/etc/rsnapshot-c.conf", confPath)
+	if err := os.WriteFile(logPath, []byte(shared), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r := NewRsnapshot(config.Config{})
+	in := r.gatherRsnapshot(rsnapTarget{Path: confPath, Name: "c"}, nil, nil, false, nil, false)
+	if in.Log.LastResult != "errors" {
+		t.Fatalf("result %+v", in.Log)
+	}
+	if want := time.Date(2026, 10, 31, 2, 12, 0, 0, time.Local); !in.LogMtime.Equal(want) {
+		t.Fatalf("activity %v, want %v", in.LogMtime, want)
 	}
 }
 
