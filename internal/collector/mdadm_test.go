@@ -56,3 +56,29 @@ func TestParseMdstatInactiveDegraded(t *testing.T) {
 		t.Fatal("no raid_degraded metric emitted")
 	}
 }
+
+func resyncValue(t *testing.T, a RaidArray) any {
+	t.Helper()
+	for _, m := range raidMetrics(a) {
+		if m.Key == "raid_resync_progress" {
+			return m.Value
+		}
+	}
+	t.Fatalf("%s: no raid_resync_progress metric emitted", a.Name)
+	return nil
+}
+
+// An idle array must publish 0, or Home Assistant keeps the last reading from
+// a finished check forever.
+func TestResyncProgressZeroWhenIdle(t *testing.T) {
+	by := map[string]RaidArray{}
+	for _, a := range parseMdstat(mdstatFixture) {
+		by[a.Name] = a
+	}
+	if v := resyncValue(t, by["md0"]); v != 0 {
+		t.Fatalf("idle md0 resync progress = %v, want 0", v)
+	}
+	if v := resyncValue(t, by["md1"]); v != 52 {
+		t.Fatalf("recovering md1 resync progress = %v, want 52", v)
+	}
+}

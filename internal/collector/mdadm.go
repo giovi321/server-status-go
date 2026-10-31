@@ -74,9 +74,14 @@ func raidMetrics(a RaidArray) []model.Metric {
 		{Key: "raid_total_devices", Component: comp, ComponentName: name, Name: "Total devices", Value: a.Total, StateClass: "measurement", Kind: model.KindSensor, Category: "diagnostic"},
 		{Key: "raid_failed_devices", Component: comp, ComponentName: name, Name: "Failed devices", Value: a.Failed, StateClass: "measurement", Kind: model.KindSensor, Category: "primary"},
 	}
+	// Always published, 0 when no resync, recovery, reshape or check is running.
+	// Publishing it only while one ran left Home Assistant holding the last
+	// reading (e.g. 98 from a finished monthly check) indefinitely.
+	pct := 0
 	if a.ResyncActive {
-		out = append(out, model.Metric{Key: "raid_resync_progress", Component: comp, ComponentName: name, Name: "Resync progress", Value: a.ResyncPct, Unit: "%", StateClass: "measurement", Kind: model.KindSensor, Category: "primary"})
+		pct = a.ResyncPct
 	}
+	out = append(out, model.Metric{Key: "raid_resync_progress", Component: comp, ComponentName: name, Name: "Resync progress", Value: pct, Unit: "%", StateClass: "measurement", Kind: model.KindSensor, Category: "primary"})
 	return out
 }
 

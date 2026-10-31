@@ -110,7 +110,7 @@ Each physical disk is a sub-device. A metric appears only when the value is pres
 | `raid_active_devices` | Active devices | | sensor | primary | |
 | `raid_total_devices` | Total devices | | sensor | diagnostic | |
 | `raid_failed_devices` | Failed devices | | sensor | primary | |
-| `raid_resync_progress` | Resync progress | % | sensor | primary | only while resync/recovery is active |
+| `raid_resync_progress` | Resync progress | % | sensor | primary | 0 when no resync, recovery, reshape or check is running |
 
 ## GPU (per GPU sub-device, NVIDIA)
 
