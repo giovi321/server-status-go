@@ -6,7 +6,8 @@ description: "Monitoring rsnapshot jobs from file evidence: entities, states, st
 The `rsnapshot` collector monitors rsnapshot backup jobs and answers one question per config file: is this backup chain alive? It never executes rsnapshot or any other binary. Every cycle it re-reads the evidence the job leaves behind:
 
 - the config file itself (`snapshot_root`, retain levels, lock and log paths)
-- the tail of the rsnapshot log (last 256 KiB, completion banners)
+- the tail of the rsnapshot log (last 1 MiB, completion banners), only the blocks whose banner names this config with `-c`
+- the per-run state files the wrapper writes to `/var/lib/rsnapshot-status/`, when present (see [Run statistics](#run-statistics))
 - the lockfile (pid, `/proc` liveness, cmdline pid-reuse guard)
 - the interval directories under the snapshot root (`hoursago.0`, `daily.0`, ...)
 - the snapshot root mount (exists, read-only)
@@ -43,6 +44,12 @@ Text values are capped at 255 characters because Home Assistant drops longer sta
 | `rsnapshot_stale` | binary_sensor | problem | the lowest `.0` is older than its staleness bound. Emitted only when a bound is known |
 | `rsnapshot_stuck` | binary_sensor | problem | a live run has held the lock longer than `stuck_after` |
 | `rsnapshot_interval_age` | sensor (h) | | age of each interval's `.0` directory, one entity per interval |
+| `rsnapshot_last_run` | sensor | timestamp | end of the newest run of any interval, from the state file or the log, whichever is newer |
+| `rsnapshot_last_run_interval` | text | | interval of that run |
+| `rsnapshot_last_run_duration` | sensor (s) | duration | duration of that run. State file only |
+| `rsnapshot_last_sync` | sensor | timestamp | end of the last good sync: the lowest interval, exit 0 or 2. State file only |
+| `rsnapshot_last_sync_transferred` | sensor (B) | data_size | bytes rsync transferred in that sync, summed over all backup points |
+| `rsnapshot_last_sync_size` | sensor (B) | data_size | logical size of the data in that snapshot (rsync's `Total file size`, summed) |
 
 ### Diagnostic
 
@@ -58,6 +65,8 @@ Text values are capped at 255 characters because Home Assistant drops longer sta
 | `rsnapshot_intervals` | text | | retain levels in file order, like `hoursago:6 daysago:7 weeksago:4 monthsago:4` |
 | `rsnapshot_stray_items` | sensor | | leftover `_delete.*` and `*.sync` entries in the snapshot root |
 | `rsnapshot_details` | text | | one-line summary, like `mount:ok rw:ok conf:ok cron:4 lock:idle stray:0` |
+| `rsnapshot_last_exit_code` | sensor | | exit code of the newest run. State file only |
+| `rsnapshot_last_sync_files` | sensor | | regular files transferred in the last good sync |
 
 ### Host level
 
@@ -105,7 +114,21 @@ The bound for the lowest interval is resolved in this order:
 2. cron-derived: the maximum gap between firings of the matched schedule, plus `margin`
 3. none: no `rsnapshot_stale` entity is emitted and no staleness is asserted
 
-A dead-man check backs this up: when a bound is known and the freshest of the log mtime, the lowest `.0` mtime, and the lock mtime is older than the bound, the state is `stale` even if the `.0` directory itself is missing. This catches a dead cron+wrapper chain that leaves no partial evidence.
+A dead-man check backs this up: when a bound is known and the freshest of this config's last log line, the lowest `.0` mtime, and the lock mtime is older than the bound, the state is `stale` even if the `.0` directory itself is missing. This catches a dead cron+wrapper chain that leaves no partial evidence.
+
+## Shared log files
+
+Several configs may log to one file. A run block belongs to the config its `started` banner names with `-c`; a banner without `-c` belongs to `/etc/rsnapshot.conf`. Lines between banners go to the newest open block, which is exact when runs are serialised by a shared lock. The activity time used by the dead-man check is this config's own last line, never the file's mtime, which another config keeps fresh. Banner timestamps are read in both the rsnapshot 1.5.x form `[2026-10-31T04:19:37]` and the older `[10/Jul/2026:05:20:01]`, in the host's local zone.
+
+## Run statistics
+
+When a wrapper records each run, the collector publishes duration, exit code and sizes. The contract, as written by `common/rsnapshot_state.sh` in `giovi321/server-scripts`:
+
+- `/var/lib/rsnapshot-status/<conf name>.<interval>.json` after every run, where `<conf name>` is the conf basename without `.conf`
+- `/var/lib/rsnapshot-status/<conf name>.last-sync.json` only after a run of the lowest interval that exited 0 or 2 and printed rsync `--stats`, so a failed run never replaces the last good sizes
+- fields: `config`, `interval`, `start`, `end` (RFC 3339), `exit_code`, `synced`, and when stats were printed `bytes_transferred`, `bytes_total`, `files_transferred`, `backup_points`
+
+The sizes need `--stats` in the config's `rsync_long_args`. Nothing walks the snapshot tree: the size of one hardlinked snapshot on disk is not measured, the logical size of its data is. Without state files these entities are simply absent, except `rsnapshot_last_run` and its interval, which fall back to the log.
 
 ## Cron schedules
 
